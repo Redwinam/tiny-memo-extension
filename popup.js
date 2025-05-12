@@ -34,7 +34,7 @@ document.addEventListener("DOMContentLoaded", () => {
       notesDisplay.value = notes.join("\n");
       console.log("[Tiny Memo] Notes loaded into popup display.");
     } catch (error) {
-      console.error("加载笔记失败:", error);
+      console.error("[Tiny Memo] 加载笔记失败:", error);
       notesDisplay.value = "加载笔记出错。";
     }
   }
@@ -54,29 +54,44 @@ document.addEventListener("DOMContentLoaded", () => {
         copyMarkdownBtn.textContent = "复制为 Markdown";
       }, 2000);
     } catch (error) {
-      console.error("复制笔记失败:", error);
+      console.error("[Tiny Memo] 复制笔记失败:", error);
       alert("复制失败！");
     }
   });
 
+  // "复制并清空笔记" 按钮的逻辑
   clearNotesBtn.addEventListener("click", async () => {
     const notesWerePresent = notesDisplay.value !== "";
 
     if (!notesWerePresent) {
-      console.log("[Tiny Memo] Clear button clicked, but no notes in display.");
-      alert("没有笔记可以清空。");
+      console.log("[Tiny Memo] Copy & Clear button clicked, but no notes in display.");
+      alert("没有笔记可以操作。"); // 更改提示文本
       return;
     }
 
-    // 直接清空，不再弹出确认对话框
     try {
+      // 1. 复制笔记
+      const data = await chrome.storage.local.get(["memoNotes"]);
+      const notes = data.memoNotes || []; // 再次获取以确保是最新的
+      if (notes.length > 0) {
+        // 再次检查以防万一
+        const markdownNotes = notes.map((note) => `- ${note}`).join("\n");
+        await navigator.clipboard.writeText(markdownNotes);
+        console.log("[Tiny Memo] Notes copied to clipboard before clearing.");
+      } else {
+        //理论上如果 notesWerePresent 为 true，这里不会执行，但作为安全措施
+        alert("没有笔记可以复制。");
+        return;
+      }
+
+      // 2. 清空笔记
       await chrome.storage.local.set({ memoNotes: [] });
-      notesDisplay.value = "";
-      console.log("[Tiny Memo] Notes cleared from storage and display.");
-      alert("笔记已清空。");
+      notesDisplay.value = ""; // Clear the textarea
+      console.log("[Tiny Memo] Notes cleared from storage and display after copying.");
+      alert("笔记已复制并清空。");
     } catch (error) {
-      console.error("清空笔记失败:", error);
-      alert("清空笔记失败！");
+      console.error("[Tiny Memo] 复制并清空笔记失败:", error);
+      alert("操作失败！请重试。");
     }
   });
 
