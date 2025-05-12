@@ -32,6 +32,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const data = await chrome.storage.local.get(["memoNotes"]);
       const notes = data.memoNotes || [];
       notesDisplay.value = notes.join("\n");
+      console.log("[Tiny Memo] Notes loaded into popup display.");
     } catch (error) {
       console.error("加载笔记失败:", error);
       notesDisplay.value = "加载笔记出错。";
@@ -59,15 +60,23 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   clearNotesBtn.addEventListener("click", async () => {
-    if (notesDisplay.value === "" || confirm("确定要清空所有笔记吗？此操作无法撤销。")) {
-      try {
-        await chrome.storage.local.set({ memoNotes: [] });
-        notesDisplay.value = "";
-        if (notesDisplay.value !== "") alert("笔记已清空。"); // 只有在原本有内容时提示
-      } catch (error) {
-        console.error("清空笔记失败:", error);
-        alert("清空笔记失败！");
-      }
+    const notesWerePresent = notesDisplay.value !== "";
+
+    if (!notesWerePresent) {
+      console.log("[Tiny Memo] Clear button clicked, but no notes in display.");
+      alert("没有笔记可以清空。");
+      return;
+    }
+
+    // 直接清空，不再弹出确认对话框
+    try {
+      await chrome.storage.local.set({ memoNotes: [] });
+      notesDisplay.value = "";
+      console.log("[Tiny Memo] Notes cleared from storage and display.");
+      alert("笔记已清空。");
+    } catch (error) {
+      console.error("清空笔记失败:", error);
+      alert("清空笔记失败！");
     }
   });
 
@@ -76,8 +85,15 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // (可选) 监听存储变化，实时更新弹窗内容
   chrome.storage.onChanged.addListener((changes, namespace) => {
-    if (namespace === "local" && changes.memoNotes) {
-      loadNotes();
+    if (namespace === "local") {
+      if (changes.memoNotes) {
+        console.log("[Tiny Memo] memoNotes changed in storage, reloading notes in popup.", changes.memoNotes);
+        loadNotes();
+      }
+      if (changes.mergeMultilineSetting) {
+        console.log("[Tiny Memo] mergeMultilineSetting changed in storage, reloading setting in popup.", changes.mergeMultilineSetting);
+        loadMergeSetting();
+      }
     }
   });
 });
