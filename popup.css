@@ -38,7 +38,6 @@ textarea#notesDisplay {
 .settings {
     margin-bottom: 12px;
     padding-top: 8px;
-    border-top: 1px solid #4a505c; /* Subtle separator */
 }
 
 .settings label {
