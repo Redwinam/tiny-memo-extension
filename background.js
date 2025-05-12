@@ -2,12 +2,35 @@
 
 // 辅助函数：保存笔记到存储
 async function saveNote(text) {
-  console.log("[Tiny Memo] Attempting to save note:", text);
-  if (text) {
+  let noteToSave = text;
+  console.log("[Tiny Memo] Original text received for saving:", text);
+
+  try {
+    // 获取"合并多行"设置
+    const settings = await chrome.storage.local.get(["mergeMultilineSetting"]);
+    const shouldMerge = settings.mergeMultilineSetting === undefined ? true : settings.mergeMultilineSetting;
+    console.log("[Tiny Memo] Merge multiline setting is:", shouldMerge);
+
+    if (shouldMerge && noteToSave && noteToSave.includes("\n")) {
+      console.log("[Tiny Memo] Merging multiline text.");
+      noteToSave = noteToSave.replace(/\n+/g, " ").trim();
+      console.log("[Tiny Memo] Text after merging:", noteToSave);
+    }
+  } catch (error) {
+    console.error("[Tiny Memo] Error reading mergeMultilineSetting, defaulting to merge:", error);
+    // 如果读取设置出错，作为降级处理，也尝试合并（如果文本包含换行符）
+    if (noteToSave && noteToSave.includes("\n")) {
+      noteToSave = noteToSave.replace(/\n+/g, " ").trim();
+    }
+  }
+
+  console.log("[Tiny Memo] Attempting to save note:", noteToSave);
+  if (noteToSave) {
+    // 确保 noteToSave 在处理后仍然有内容
     try {
       const data = await chrome.storage.local.get(["memoNotes"]);
       const notes = data.memoNotes || [];
-      notes.push(text);
+      notes.push(noteToSave);
       await chrome.storage.local.set({ memoNotes: notes });
       console.log("[Tiny Memo] Note saved successfully.");
     } catch (error) {

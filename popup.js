@@ -3,6 +3,29 @@ document.addEventListener("DOMContentLoaded", () => {
   const notesDisplay = document.getElementById("notesDisplay");
   const copyMarkdownBtn = document.getElementById("copyMarkdownBtn");
   const clearNotesBtn = document.getElementById("clearNotesBtn");
+  const mergeMultilineCheckbox = document.getElementById("mergeMultilineCheckbox");
+
+  // 加载"合并多行"设置
+  async function loadMergeSetting() {
+    try {
+      const data = await chrome.storage.local.get(["mergeMultilineSetting"]);
+      // 默认开启，所以如果未定义，则设为 true
+      mergeMultilineCheckbox.checked = data.mergeMultilineSetting === undefined ? true : data.mergeMultilineSetting;
+    } catch (error) {
+      console.error("[Tiny Memo] 加载合并设置失败:", error);
+      mergeMultilineCheckbox.checked = true; // 出错时也默认开启
+    }
+  }
+
+  // 保存"合并多行"设置
+  mergeMultilineCheckbox.addEventListener("change", async () => {
+    try {
+      await chrome.storage.local.set({ mergeMultilineSetting: mergeMultilineCheckbox.checked });
+      console.log("[Tiny Memo] 合并设置已保存:", mergeMultilineCheckbox.checked);
+    } catch (error) {
+      console.error("[Tiny Memo] 保存合并设置失败:", error);
+    }
+  });
 
   async function loadNotes() {
     try {
@@ -49,6 +72,7 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   loadNotes(); // 弹窗加载时即显示笔记
+  loadMergeSetting(); // 加载合并设置
 
   // (可选) 监听存储变化，实时更新弹窗内容
   chrome.storage.onChanged.addListener((changes, namespace) => {
