@@ -179,41 +179,43 @@ function showTinyMemoNotification(noteCount) {
     position: "fixed",
     top: "20px",
     right: "20px",
-    backgroundColor: "rgba(0, 0, 0, 0.8)",
+    backgroundColor: "rgba(0, 0, 0, 0.85)",
     color: "white",
-    padding: "15px 20px",
-    borderRadius: "8px",
+    padding: "12px 18px",
+    borderRadius: "6px",
     zIndex: "2147483647",
     fontFamily: "sans-serif",
     fontSize: "14px",
     display: "flex",
-    flexDirection: "column",
-    alignItems: "flex-start",
-    gap: "10px",
-    boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: "15px",
+    boxShadow: "0 3px 10px rgba(0,0,0,0.3)",
     opacity: "0",
-    transition: "opacity 0.5s ease-in-out, transform 0.5s ease-in-out",
-    transform: "translateX(100%)", // Start off-screen
+    transition: "opacity 0.25s ease-out, transform 0.25s ease-out",
+    transform: "translateX(100%)",
   });
 
   const message = document.createElement("span");
   message.textContent = `记录+1，当前共 ${noteCount} 条记录`;
+  message.style.whiteSpace = "nowrap";
   notification.appendChild(message);
 
   const button = document.createElement("button");
-  button.textContent = "复制并清空记录";
+  button.textContent = "复制并清空";
   Object.assign(button.style, {
     backgroundColor: "#4CAF50",
     border: "none",
     color: "white",
-    padding: "8px 12px",
+    padding: "6px 10px",
     textAlign: "center",
     textDecoration: "none",
     display: "inline-block",
     fontSize: "12px",
     borderRadius: "4px",
     cursor: "pointer",
-    alignSelf: "flex-end",
+    flexShrink: "0",
   });
 
   button.onclick = async () => {

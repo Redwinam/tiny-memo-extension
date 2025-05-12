@@ -3,39 +3,13 @@
   <head>
     <meta charset="UTF-8" />
     <title>我的简易笔记</title>
-    <style>
-      body {
-        font-family: sans-serif;
-        width: 350px;
-        min-height: 200px;
-        padding: 10px;
-        display: flex;
-        flex-direction: column;
-      }
-      textarea#notesDisplay {
-        flex-grow: 1;
-        width: 100%;
-        box-sizing: border-box;
-        margin-bottom: 10px;
-        border: 1px solid #ccc;
-        padding: 5px;
-        font-size: 13px;
-      }
-      .buttons {
-        display: flex;
-        justify-content: space-between;
-      }
-      button {
-        padding: 8px 12px;
-        font-size: 13px;
-        cursor: pointer;
-      }
-    </style>
+    <link rel="stylesheet" href="popup.css" />
+    <!-- <style> ... existing inline styles removed or commented out ... </style> -->
   </head>
   <body>
     <h4>收集的笔记：</h4>
     <textarea id="notesDisplay" readonly></textarea>
-    <div class="settings" style="margin-bottom: 10px; padding-top: 5px; border-top: 1px solid #eee">
+    <div class="settings" style="margin-bottom: 10px; padding-top: 5px">
       <label for="mergeMultilineCheckbox" style="font-size: 13px; display: flex; align-items: center; cursor: pointer">
         <input type="checkbox" id="mergeMultilineCheckbox" style="margin-right: 5px" />
         将多行选中文本合并为单行 (默认开启)
@@ -43,7 +17,7 @@
     </div>
     <div class="buttons">
       <button id="copyMarkdownBtn">复制为 Markdown</button>
-      <button id="clearNotesBtn">复制并清空笔记</button>
+      <button id="clearNotesBtn">复制并清空</button>
     </div>
     <script src="popup.js"></script>
   </body>
