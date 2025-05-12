@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>我的简易笔记</title>
+    <style>
+      body {
+        font-family: sans-serif;
+        width: 350px;
+        min-height: 200px;
+        padding: 10px;
+        display: flex;
+        flex-direction: column;
+      }
+      textarea#notesDisplay {
+        flex-grow: 1;
+        width: 100%;
+        box-sizing: border-box;
+        margin-bottom: 10px;
+        border: 1px solid #ccc;
+        padding: 5px;
+        font-size: 13px;
+      }
+      .buttons {
+        display: flex;
+        justify-content: space-between;
+      }
+      button {
+        padding: 8px 12px;
+        font-size: 13px;
+        cursor: pointer;
+      }
+    </style>
+  </head>
+  <body>
+    <h4>收集的笔记：</h4>
+    <textarea id="notesDisplay" readonly></textarea>
+    <div class="buttons">
+      <button id="copyMarkdownBtn">复制为 Markdown</button>
+      <button id="clearNotesBtn">清空笔记</button>
+    </div>
+    <script src="popup.js"></script>
+  </body>
+</html>
