@@ -1,30 +1,71 @@
 // background.js
 
+// 辅助函数：保存笔记到存储
+async function saveNote(text) {
+  console.log("[Tiny Memo] Attempting to save note:", text);
+  if (text) {
+    try {
+      const data = await chrome.storage.local.get(["memoNotes"]);
+      const notes = data.memoNotes || [];
+      notes.push(text);
+      await chrome.storage.local.set({ memoNotes: notes });
+      console.log("[Tiny Memo] Note saved successfully.");
+    } catch (error) {
+      console.error("[Tiny Memo] Error saving note:", error);
+    }
+  }
+}
+
 // 插件安装时创建右键菜单
 chrome.runtime.onInstalled.addListener(() => {
   chrome.contextMenus.create({
     id: "addSelectionToMemo",
-    title: "添加到我的简易笔记", // 右键菜单显示的文字
-    contexts: ["selection"], // 只在有文本选中时显示
+    title: "添加到我的简易笔记",
+    contexts: ["selection"],
   });
+  console.log("[Tiny Memo] Context menu created.");
 });
 
 // 监听右键菜单点击
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
+  console.log("[Tiny Memo] Context menu clicked:", info);
   if (info.menuItemId === "addSelectionToMemo" && info.selectionText) {
     const selectedText = info.selectionText.trim();
-    if (selectedText) {
+    await saveNote(selectedText);
+  }
+});
+
+// 监听快捷键命令
+chrome.commands.onCommand.addListener(async (command, tab) => {
+  console.log(`[Tiny Memo] Command received: ${command}`, "Tab info:", tab);
+  if (command === "add-selection-shortcut") {
+    if (tab && tab.id) {
+      console.log("[Tiny Memo] Executing script for tab ID:", tab.id);
       try {
-        // 从存储中获取当前笔记
-        const data = await chrome.storage.local.get(["memoNotes"]);
-        const notes = data.memoNotes || [];
-        notes.push(selectedText); // 追加新笔记
-        // 保存更新后的笔记
-        await chrome.storage.local.set({ memoNotes: notes });
-        // （可选）可以通过发送消息给内容脚本或弹窗来提示用户添加成功
+        await chrome.scripting.executeScript({
+          target: { tabId: tab.id },
+          files: ["content_script.js"],
+        });
+        console.log("[Tiny Memo] content_script.js executed for tab:", tab.id);
       } catch (error) {
-        console.error("保存笔记失败:", error);
+        console.error("[Tiny Memo] Error executing content_script.js:", error, "Tab URL:", tab.url);
       }
+    } else {
+      console.warn("[Tiny Memo] Command received but no valid tab ID found. Tab:", tab);
     }
   }
 });
+
+// 监听从内容脚本发送过来的消息
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  console.log("[Tiny Memo] Message received from content script:", message, "Sender:", sender);
+  if (message.type === "SELECTION_FROM_CONTENT_SCRIPT" && message.text) {
+    (async () => {
+      await saveNote(message.text);
+      // sendResponse({ status: "success", message: "笔记已保存" }); // 可选
+    })();
+    // return true; // 如果需要异步发送响应
+  }
+});
+
+console.log("[Tiny Memo] background.js loaded and running.");

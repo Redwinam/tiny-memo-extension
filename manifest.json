@@ -3,7 +3,8 @@
   "name": "简易笔记收藏家",
   "version": "0.1.0",
   "description": "快速收集选中的文本片段到 Markdown 列表。",
-  "permissions": ["contextMenus", "storage"],
+  "permissions": ["contextMenus", "storage", "scripting", "commands"],
+  "host_permissions": ["<all_urls>"],
   "background": {
     "service_worker": "background.js"
   },
@@ -19,5 +20,14 @@
     "16": "icons/icon16.png",
     "48": "icons/icon48.png",
     "128": "icons/icon128.png"
+  },
+  "commands": {
+    "add-selection-shortcut": {
+      "suggested_key": {
+        "default": "Alt+Q",
+        "mac": "MacCtrl+Q"
+      },
+      "description": "通过快捷键将选中内容添加到笔记"
+    }
   }
 }
