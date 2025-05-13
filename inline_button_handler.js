@@ -1,0 +1,122 @@
+(() => {
+  console.log("[Tiny Memo - Inline Button] Handler loaded.");
+
+  let memoButton = null;
+  const BUTTON_ID = "tiny-memo-inline-button";
+
+  function createButton() {
+    if (document.getElementById(BUTTON_ID)) return document.getElementById(BUTTON_ID);
+
+    const button = document.createElement("button");
+    button.id = BUTTON_ID;
+    button.textContent = "添加到笔记"; // 或者用一个图标
+    // 基础样式
+    Object.assign(button.style, {
+      position: "absolute",
+      zIndex: "2147483646", //略低于通知的 z-index
+      backgroundColor: "#282c34",
+      color: "white",
+      border: "1px solid #4CAF50",
+      borderRadius: "4px",
+      padding: "5px 8px",
+      fontSize: "12px",
+      cursor: "pointer",
+      boxShadow: "0 2px 5px rgba(0,0,0,0.2)",
+      display: "none", // 默认隐藏
+    });
+
+    button.addEventListener("click", async (event) => {
+      event.stopPropagation(); // 防止点击事件冒泡到页面
+      const selection = window.getSelection();
+      const selectedText = selection.toString().trim();
+      if (selectedText) {
+        console.log("[Tiny Memo - Inline Button] Button clicked, sending text:", selectedText);
+        chrome.runtime.sendMessage({ type: "SELECTION_FROM_CONTENT_SCRIPT", text: selectedText }, (response) => {
+          if (chrome.runtime.lastError) {
+            console.error("[Tiny Memo - Inline Button] Error sending message:", chrome.runtime.lastError.message);
+            // alert('添加到笔记失败: ' + chrome.runtime.lastError.message);
+          } else {
+            console.log("[Tiny Memo - Inline Button] Message sent, background responded.");
+            // 成功发送后，按钮应该消失
+          }
+        });
+      }
+      hideButton(); // 点击后无论如何都隐藏按钮
+    });
+
+    document.body.appendChild(button);
+    return button;
+  }
+
+  function showButton(x, y) {
+    if (!memoButton) memoButton = createButton();
+    if (memoButton) {
+      // 根据选区位置调整按钮位置 (简单定位在选区右下方)
+      // y + window.scrollY 确保在滚动页面后位置正确
+      // x + 5 稍微偏右一点
+      memoButton.style.left = `${x + 5}px`;
+      memoButton.style.top = `${y + window.scrollY - 5}px`;
+      memoButton.style.display = "block";
+      console.log("[Tiny Memo - Inline Button] Showing button at:", memoButton.style.left, memoButton.style.top);
+    }
+  }
+
+  function hideButton() {
+    if (memoButton) {
+      memoButton.style.display = "none";
+      console.log("[Tiny Memo - Inline Button] Hiding button.");
+    }
+  }
+
+  document.addEventListener("mouseup", (event) => {
+    // 确保不是点击在我们的按钮上
+    if (event.target && event.target.id === BUTTON_ID) return;
+
+    const selection = window.getSelection();
+    const selectedText = selection.toString().trim();
+
+    if (selectedText.length > 0) {
+      const range = selection.getRangeAt(0);
+      const rect = range.getBoundingClientRect();
+      // 显示按钮在选区的右下角
+      showButton(rect.right, rect.bottom);
+    } else {
+      hideButton();
+    }
+  });
+
+  // 如果用户点击页面其他地方（非按钮也非新选区），也隐藏按钮
+  document.addEventListener(
+    "mousedown",
+    (event) => {
+      if (memoButton && memoButton.style.display === "block") {
+        if (event.target.id !== BUTTON_ID && !memoButton.contains(event.target)) {
+          // 检查点击的是否是选区内的文本，如果是，则不立即隐藏，等待mouseup判断
+          const selection = window.getSelection();
+          if (!selection || selection.isCollapsed || !selection.getRangeAt(0).toString().trim()) {
+            hideButton();
+          }
+        }
+      }
+    },
+    true
+  ); // 使用捕获阶段提前处理
+
+  // 如果选区改变（例如通过键盘），也隐藏按钮
+  // 但 selectionchange 触发非常频繁，需要小心处理
+  let hideButtonTimeout = null;
+  document.addEventListener("selectionchange", () => {
+    clearTimeout(hideButtonTimeout);
+    hideButtonTimeout = setTimeout(() => {
+      const selection = window.getSelection();
+      if (!selection || selection.isCollapsed || !selection.getRangeAt(0).toString().trim()) {
+        if (document.activeElement && document.activeElement.id !== BUTTON_ID) {
+          // 确保焦点不在按钮上
+          hideButton();
+        }
+      }
+    }, 150); // 稍微延迟一下，避免过于灵敏
+  });
+
+  memoButton = createButton(); // 预先创建按钮，但保持隐藏
+})();
