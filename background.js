@@ -193,8 +193,7 @@ function showTinyMemoNotification(noteCount) {
     gap: "15px",
     boxShadow: "0 3px 10px rgba(0,0,0,0.3)",
     opacity: "0",
-    transition: "opacity 0.25s ease-out, transform 0.25s ease-out",
-    transform: "translateX(100%)",
+    transition: "opacity 0.3s ease-in-out",
   });
 
   const message = document.createElement("span");
@@ -270,12 +269,10 @@ function showTinyMemoNotification(noteCount) {
   notification.appendChild(button);
 
   document.body.appendChild(notification);
-  // Animate in
+  // Animate in (Fade in)
   requestAnimationFrame(() => {
     requestAnimationFrame(() => {
-      // Double requestAnimationFrame for reliability
       notification.style.opacity = "1";
-      notification.style.transform = "translateX(0)";
     });
   });
 
@@ -285,13 +282,12 @@ function showTinyMemoNotification(noteCount) {
     const elem = document.getElementById(notificationId);
     if (elem) {
       elem.style.opacity = "0";
-      elem.style.transform = "translateX(100%)";
       setTimeout(
         () => {
           elem.remove();
         },
-        force ? 0 : 500
-      ); // Remove immediately if forced
+        force ? 0 : 300
+      );
     }
   };
 
