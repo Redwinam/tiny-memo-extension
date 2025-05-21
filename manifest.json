@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "description": "快速收集选中的文本片段到 Markdown 列表。",
   "permissions": ["contextMenus", "storage", "scripting", "commands"],
-  "host_permissions": ["<all_urls>"],
+  "host_permissions": ["<all_urls>", "http://localhost:5020/*"],
   "background": {
     "service_worker": "background.js"
   },

@@ -4,6 +4,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const copyMarkdownBtn = document.getElementById("copyMarkdownBtn");
   const clearNotesBtn = document.getElementById("clearNotesBtn");
   const mergeMultilineCheckbox = document.getElementById("mergeMultilineCheckbox");
+  const ttsVoiceSelect = document.getElementById("ttsVoiceSelect");
 
   // 加载"合并多行"设置
   async function loadMergeSetting() {
@@ -24,6 +25,117 @@ document.addEventListener("DOMContentLoaded", () => {
       console.log("[Tiny Memo] 合并设置已保存:", mergeMultilineCheckbox.checked);
     } catch (error) {
       console.error("[Tiny Memo] 保存合并设置失败:", error);
+    }
+  });
+
+  // 加载TTS语音选项
+  async function loadTtsVoices() {
+    try {
+      // 先加载当前选择的语音
+      const settings = await chrome.storage.local.get(["ttsVoice"]);
+      const currentVoice = settings.ttsVoice || "zh-CN-XiaoxiaoNeural"; // 默认中文语音
+
+      // 从背景脚本获取语音列表
+      chrome.runtime.sendMessage({ type: "GET_TTS_VOICES" }, (response) => {
+        if (chrome.runtime.lastError) {
+          console.error("[Tiny Memo] 获取TTS语音列表失败:", chrome.runtime.lastError);
+          return;
+        }
+
+        if (response && response.success && response.voices) {
+          populateVoiceSelect(response.voices, currentVoice);
+        } else {
+          console.error("[Tiny Memo] 获取TTS语音列表响应错误:", response?.error);
+        }
+      });
+    } catch (error) {
+      console.error("[Tiny Memo] 加载TTS语音设置失败:", error);
+    }
+  }
+
+  // 填充语音选择下拉菜单
+  function populateVoiceSelect(voices, currentVoice) {
+    // 清空现有选项
+    ttsVoiceSelect.innerHTML = "";
+
+    // 常用语言（优先显示）
+    const commonLanguages = ["zh", "en", "ja"];
+    const languageNames = {
+      zh: "中文",
+      en: "英语",
+      ja: "日语",
+      ko: "韩语",
+      fr: "法语",
+      de: "德语",
+      es: "西班牙语",
+    };
+
+    // 如果voices不是按语言分组的，则创建一个简单列表
+    if (!voices.zh && Array.isArray(voices)) {
+      voices.forEach((voice) => {
+        const option = document.createElement("option");
+        option.value = voice.name || voice;
+        option.text = voice.displayName || voice.name || voice;
+        if (voice.name === currentVoice || voice === currentVoice) {
+          option.selected = true;
+        }
+        ttsVoiceSelect.appendChild(option);
+      });
+      return;
+    }
+
+    // 按语言分组添加语音选项
+    // 先添加常用语言
+    commonLanguages.forEach((lang) => {
+      if (voices[lang] && voices[lang].length > 0) {
+        const optgroup = document.createElement("optgroup");
+        optgroup.label = languageNames[lang] || lang;
+
+        voices[lang].forEach((voice) => {
+          const option = document.createElement("option");
+          option.value = voice.name;
+          option.text = voice.displayName || `${voice.name}`;
+          if (voice.name === currentVoice) {
+            option.selected = true;
+          }
+          optgroup.appendChild(option);
+        });
+
+        ttsVoiceSelect.appendChild(optgroup);
+      }
+    });
+
+    // 添加其他语言
+    Object.keys(voices).forEach((lang) => {
+      if (!commonLanguages.includes(lang) && voices[lang] && voices[lang].length > 0) {
+        const optgroup = document.createElement("optgroup");
+        optgroup.label = languageNames[lang] || lang;
+
+        voices[lang].forEach((voice) => {
+          const option = document.createElement("option");
+          option.value = voice.name;
+          option.text = voice.displayName || `${voice.name}`;
+          if (voice.name === currentVoice) {
+            option.selected = true;
+          }
+          optgroup.appendChild(option);
+        });
+
+        ttsVoiceSelect.appendChild(optgroup);
+      }
+    });
+  }
+
+  // 保存TTS语音设置
+  ttsVoiceSelect.addEventListener("change", async () => {
+    const selectedVoice = ttsVoiceSelect.value;
+    if (selectedVoice) {
+      try {
+        await chrome.storage.local.set({ ttsVoice: selectedVoice });
+        console.log("[Tiny Memo] TTS语音设置已保存:", selectedVoice);
+      } catch (error) {
+        console.error("[Tiny Memo] 保存TTS语音设置失败:", error);
+      }
     }
   });
 
@@ -103,6 +215,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   loadNotes(); // 弹窗加载时即显示笔记
   loadMergeSetting(); // 加载合并设置
+  loadTtsVoices(); // 加载TTS语音选项
 
   // (可选) 监听存储变化，实时更新弹窗内容
   chrome.storage.onChanged.addListener((changes, namespace) => {
@@ -114,6 +227,17 @@ document.addEventListener("DOMContentLoaded", () => {
       if (changes.mergeMultilineSetting) {
         console.log("[Tiny Memo] mergeMultilineSetting changed in storage, reloading setting in popup.", changes.mergeMultilineSetting);
         loadMergeSetting();
+      }
+      if (changes.ttsVoice) {
+        console.log("[Tiny Memo] ttsVoice changed in storage, reloading setting in popup.", changes.ttsVoice);
+        // 只需更新下拉框选中值，无需重新加载所有语音
+        if (ttsVoiceSelect.value !== changes.ttsVoice.newValue) {
+          const options = Array.from(ttsVoiceSelect.options);
+          const matching = options.find((opt) => opt.value === changes.ttsVoice.newValue);
+          if (matching) {
+            matching.selected = true;
+          }
+        }
       }
     }
   });

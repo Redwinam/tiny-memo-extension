@@ -55,6 +55,27 @@ textarea#notesDisplay {
     accent-color: #4CAF50; /* Use accent color for the checkmark */
 }
 
+.settings-group {
+    margin-top: 10px;
+}
+
+.settings-group label {
+    display: block;
+    margin-bottom: 5px;
+}
+
+select#ttsVoiceSelect {
+    width: 100%;
+    padding: 5px;
+    background-color: #3a3f4b;
+    color: #dcdfe4;
+    border: 1px solid #4a505c;
+    border-radius: 4px;
+    font-size: 13px;
+    cursor: pointer;
+    margin-bottom: 8px;
+}
+
 .buttons {
     display: flex;
     justify-content: space-between;

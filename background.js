@@ -42,6 +42,60 @@ async function saveNote(text) {
   }
 }
 
+// TTS 功能：文本转语音
+async function synthesizeSpeech(text) {
+  try {
+    console.log("[Tiny Memo] Requesting TTS for text:", text);
+
+    // 获取当前的TTS设置
+    const settings = await chrome.storage.local.get(["ttsVoice"]);
+    const voice = settings.ttsVoice || "zh-CN-XiaoxiaoNeural"; // 默认中文语音
+
+    // 调用本地TTS API
+    const response = await fetch("http://localhost:5020/api/tts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        text: text,
+        voice: voice,
+        return_type: "url",
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`TTS请求失败: ${response.status}`);
+    }
+
+    const data = await response.json();
+    console.log("[Tiny Memo] TTS API response:", data);
+
+    if (data.success) {
+      return data.audio_url; // 返回音频URL
+    } else {
+      throw new Error(data.error || "TTS服务返回错误");
+    }
+  } catch (error) {
+    console.error("[Tiny Memo] TTS synthesis error:", error);
+    return null;
+  }
+}
+
+// 获取可用的TTS语音列表
+async function getAvailableVoices() {
+  try {
+    const response = await fetch("http://localhost:5020/api/voices");
+    if (!response.ok) {
+      throw new Error(`获取语音列表失败: ${response.status}`);
+    }
+    const voices = await response.json();
+    console.log("[Tiny Memo] Available TTS voices:", voices);
+    return voices;
+  } catch (error) {
+    console.error("[Tiny Memo] Error fetching TTS voices:", error);
+    return {};
+  }
+}
+
 // 新增：执行复制并清空操作的核心逻辑
 async function performCopyAndClear() {
   try {
@@ -151,6 +205,30 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     (async () => {
       const result = await performCopyAndClear();
       sendResponse(result);
+    })();
+    return true;
+  } else if (message.type === "TTS_REQUEST") {
+    // 处理TTS请求
+    (async () => {
+      try {
+        const audioUrl = await synthesizeSpeech(message.text);
+        sendResponse({ success: true, audio_url: audioUrl });
+      } catch (error) {
+        console.error("[Tiny Memo] TTS processing error:", error);
+        sendResponse({ success: false, error: error.message });
+      }
+    })();
+    return true;
+  } else if (message.type === "GET_TTS_VOICES") {
+    // 获取TTS语音列表
+    (async () => {
+      try {
+        const voices = await getAvailableVoices();
+        sendResponse({ success: true, voices: voices });
+      } catch (error) {
+        console.error("[Tiny Memo] Error fetching TTS voices:", error);
+        sendResponse({ success: false, error: error.message });
+      }
     })();
     return true;
   }
@@ -296,6 +374,20 @@ function showTinyMemoNotification(noteCount) {
   notification.onmouseleave = () => {
     timeoutId = setTimeout(removeNotification, 3000);
   };
+}
+
+// 用于在页面中播放TTS音频的函数
+function playTtsAudio(audioUrl) {
+  console.log("[Tiny Memo Content] Playing TTS audio:", audioUrl);
+
+  // 创建音频元素
+  const audio = new Audio(audioUrl);
+
+  // 播放音频
+  audio.play().catch((error) => {
+    console.error("[Tiny Memo Content] Error playing TTS audio:", error);
+    alert("播放TTS语音失败");
+  });
 }
 
 console.log("[Tiny Memo] background.js loaded and running.");
