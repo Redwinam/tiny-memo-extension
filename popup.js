@@ -5,6 +5,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const clearNotesBtn = document.getElementById("clearNotesBtn");
   const mergeMultilineCheckbox = document.getElementById("mergeMultilineCheckbox");
   const ttsVoiceSelect = document.getElementById("ttsVoiceSelect");
+  const autoTtsCheckbox = document.getElementById("autoTtsCheckbox");
 
   // 加载"合并多行"设置
   async function loadMergeSetting() {
@@ -25,6 +26,29 @@ document.addEventListener("DOMContentLoaded", () => {
       console.log("[Tiny Memo] 合并设置已保存:", mergeMultilineCheckbox.checked);
     } catch (error) {
       console.error("[Tiny Memo] 保存合并设置失败:", error);
+    }
+  });
+
+  // 加载"自动TTS"设置
+  async function loadAutoTtsSetting() {
+    try {
+      const data = await chrome.storage.local.get(["autoTtsSetting"]);
+      // 默认关闭，所以如果未定义，则设为 false
+      autoTtsCheckbox.checked = data.autoTtsSetting === true;
+      console.log("[Tiny Memo] 自动TTS设置已加载:", autoTtsCheckbox.checked);
+    } catch (error) {
+      console.error("[Tiny Memo] 加载自动TTS设置失败:", error);
+      autoTtsCheckbox.checked = false; // 出错时默认关闭
+    }
+  }
+
+  // 保存"自动TTS"设置
+  autoTtsCheckbox.addEventListener("change", async () => {
+    try {
+      await chrome.storage.local.set({ autoTtsSetting: autoTtsCheckbox.checked });
+      console.log("[Tiny Memo] 自动TTS设置已保存:", autoTtsCheckbox.checked);
+    } catch (error) {
+      console.error("[Tiny Memo] 保存自动TTS设置失败:", error);
     }
   });
 
@@ -216,6 +240,7 @@ document.addEventListener("DOMContentLoaded", () => {
   loadNotes(); // 弹窗加载时即显示笔记
   loadMergeSetting(); // 加载合并设置
   loadTtsVoices(); // 加载TTS语音选项
+  loadAutoTtsSetting(); // 加载自动TTS设置
 
   // (可选) 监听存储变化，实时更新弹窗内容
   chrome.storage.onChanged.addListener((changes, namespace) => {
@@ -238,6 +263,10 @@ document.addEventListener("DOMContentLoaded", () => {
             matching.selected = true;
           }
         }
+      }
+      if (changes.autoTtsSetting) {
+        console.log("[Tiny Memo] autoTtsSetting changed in storage, reloading setting in popup.", changes.autoTtsSetting);
+        autoTtsCheckbox.checked = changes.autoTtsSetting.newValue === true;
       }
     }
   });

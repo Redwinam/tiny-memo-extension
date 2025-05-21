@@ -258,7 +258,7 @@ function showTinyMemoNotification(noteCount) {
     top: "20px",
     right: "20px",
     backgroundColor: "rgba(0, 0, 0, 0.85)",
-    color: "white",
+    color: "#FFFFFF",
     padding: "12px 18px",
     borderRadius: "6px",
     zIndex: "2147483647",

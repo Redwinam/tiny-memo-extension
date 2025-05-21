@@ -5,6 +5,22 @@
   let ttsButton = null;
   const BUTTON_ID = "tiny-memo-inline-button";
   const TTS_BUTTON_ID = "tiny-memo-tts-button";
+  let autoTtsEnabled = false;
+  let isAutoTtsPlaying = false;
+
+  // 加载自动TTS设置
+  chrome.storage.local.get(["autoTtsSetting"], (result) => {
+    autoTtsEnabled = result.autoTtsSetting === true;
+    console.log("[Tiny Memo - Inline Button] 自动TTS设置已加载:", autoTtsEnabled);
+  });
+
+  // 监听存储变化，实时更新设置
+  chrome.storage.onChanged.addListener((changes, namespace) => {
+    if (namespace === "local" && changes.autoTtsSetting) {
+      autoTtsEnabled = changes.autoTtsSetting.newValue === true;
+      console.log("[Tiny Memo - Inline Button] 自动TTS设置已更新:", autoTtsEnabled);
+    }
+  });
 
   function createButton() {
     if (document.getElementById(BUTTON_ID)) return document.getElementById(BUTTON_ID);
@@ -119,6 +135,27 @@
     });
   }
 
+  // 请求TTS并播放音频
+  function requestAndPlayTts(text) {
+    if (!text || isAutoTtsPlaying) return;
+
+    isAutoTtsPlaying = true;
+    console.log("[Tiny Memo - Auto TTS] Requesting TTS for:", text);
+
+    chrome.runtime.sendMessage({ type: "TTS_REQUEST", text: text }, (response) => {
+      isAutoTtsPlaying = false;
+
+      if (chrome.runtime.lastError) {
+        console.error("[Tiny Memo - Auto TTS] Error requesting TTS:", chrome.runtime.lastError.message);
+      } else if (response && response.success) {
+        console.log("[Tiny Memo - Auto TTS] TTS audio URL received:", response.audio_url);
+        playTtsAudio(response.audio_url);
+      } else {
+        console.error("[Tiny Memo - Auto TTS] TTS request failed:", response?.error);
+      }
+    });
+  }
+
   function showButton(x, y) {
     if (!memoButton) memoButton = createButton();
     if (memoButton) {
@@ -166,6 +203,11 @@
       const rect = range.getBoundingClientRect();
       // 显示按钮在选区的右下角
       showButton(rect.right, rect.bottom);
+
+      // 如果启用了自动TTS，则自动朗读选中文本
+      if (autoTtsEnabled) {
+        requestAndPlayTts(selectedText);
+      }
     } else {
       hideButton();
       hideTtsButton();
