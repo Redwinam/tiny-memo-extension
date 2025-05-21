@@ -284,7 +284,7 @@ function showTinyMemoNotification(noteCount) {
   Object.assign(button.style, {
     backgroundColor: "#4CAF50",
     border: "none",
-    color: "white",
+    color: "#FFFFFF",
     padding: "6px 10px",
     textAlign: "center",
     textDecoration: "none",
@@ -386,8 +386,79 @@ function playTtsAudio(audioUrl) {
   // 播放音频
   audio.play().catch((error) => {
     console.error("[Tiny Memo Content] Error playing TTS audio:", error);
-    alert("播放TTS语音失败");
+    // 使用右上角通知替代alert
+    showTinyMemoErrorNotification("播放TTS语音失败");
   });
+}
+
+// 显示错误通知的函数
+function showTinyMemoErrorNotification(errorMessage) {
+  // 防止重复创建
+  const existingNotification = document.getElementById("tiny-memo-error-notification");
+  if (existingNotification) {
+    existingNotification.remove();
+  }
+
+  console.log(`[Tiny Memo Content] Showing error notification: ${errorMessage}`);
+
+  const notificationId = "tiny-memo-error-notification";
+  const notification = document.createElement("div");
+  notification.id = notificationId;
+
+  // 基本样式
+  Object.assign(notification.style, {
+    position: "fixed",
+    top: "20px",
+    right: "20px",
+    backgroundColor: "rgba(220, 53, 69, 0.9)", // 红色背景，表示错误
+    color: "#FFFFFF",
+    padding: "12px 18px",
+    borderRadius: "6px",
+    zIndex: "2147483647",
+    fontFamily: "sans-serif",
+    fontSize: "14px",
+    display: "flex",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: "15px",
+    boxShadow: "0 3px 10px rgba(0,0,0,0.3)",
+    opacity: "0",
+    transition: "opacity 0.3s ease-in-out",
+    maxWidth: "300px",
+  });
+
+  const message = document.createElement("span");
+  message.textContent = errorMessage;
+  message.style.whiteSpace = "normal"; // 允许文本换行
+  notification.appendChild(message);
+
+  document.body.appendChild(notification);
+  // Animate in (Fade in)
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      notification.style.opacity = "1";
+    });
+  });
+
+  // 自动关闭通知
+  const timeoutId = setTimeout(() => {
+    notification.style.opacity = "0";
+    setTimeout(() => {
+      notification.remove();
+    }, 300);
+  }, 3000);
+
+  // 鼠标悬停时暂停关闭计时
+  notification.onmouseenter = () => clearTimeout(timeoutId);
+  notification.onmouseleave = () => {
+    setTimeout(() => {
+      notification.style.opacity = "0";
+      setTimeout(() => {
+        notification.remove();
+      }, 300);
+    }, 3000);
+  };
 }
 
 console.log("[Tiny Memo] background.js loaded and running.");

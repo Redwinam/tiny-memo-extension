@@ -107,7 +107,7 @@
 
           if (chrome.runtime.lastError) {
             console.error("[Tiny Memo - TTS Button] Error requesting TTS:", chrome.runtime.lastError.message);
-            alert("TTS请求失败: " + chrome.runtime.lastError.message);
+            showTtsErrorNotification("TTS请求失败: " + chrome.runtime.lastError.message);
           } else if (response && response.success) {
             console.log("[Tiny Memo - TTS Button] TTS audio URL received:", response.audio_url);
 
@@ -115,7 +115,7 @@
             playTtsAudio(response.audio_url);
           } else {
             console.error("[Tiny Memo - TTS Button] TTS request failed:", response?.error);
-            alert("TTS生成失败: " + (response?.error || "未知错误"));
+            showTtsErrorNotification("TTS生成失败: " + (response?.error || "未知错误"));
           }
         });
       }
@@ -131,8 +131,77 @@
     const audio = new Audio(audioUrl);
     audio.play().catch((error) => {
       console.error("[Tiny Memo - TTS Button] Error playing audio:", error);
-      alert("音频播放失败");
+      showTtsErrorNotification("音频播放失败");
     });
+  }
+
+  // 显示TTS错误通知
+  function showTtsErrorNotification(errorMessage) {
+    // 防止重复创建
+    const existingNotification = document.getElementById("tiny-memo-tts-error");
+    if (existingNotification) {
+      existingNotification.remove();
+    }
+
+    console.log(`[Tiny Memo - TTS Button] Showing error notification: ${errorMessage}`);
+
+    const notificationId = "tiny-memo-tts-error";
+    const notification = document.createElement("div");
+    notification.id = notificationId;
+
+    // 基本样式
+    Object.assign(notification.style, {
+      position: "fixed",
+      top: "20px",
+      right: "20px",
+      backgroundColor: "rgba(220, 53, 69, 0.9)", // 红色背景，表示错误
+      color: "#FFFFFF",
+      padding: "12px 16px",
+      borderRadius: "6px",
+      zIndex: "2147483647",
+      fontFamily: "sans-serif",
+      fontSize: "14px",
+      display: "flex",
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      boxShadow: "0 3px 10px rgba(0,0,0,0.3)",
+      opacity: "0",
+      transition: "opacity 0.3s ease-in-out",
+      maxWidth: "300px",
+    });
+
+    const message = document.createElement("span");
+    message.textContent = errorMessage;
+    notification.appendChild(message);
+
+    document.body.appendChild(notification);
+
+    // 动画显示
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        notification.style.opacity = "1";
+      });
+    });
+
+    // 3秒后自动关闭
+    const timeoutId = setTimeout(() => {
+      notification.style.opacity = "0";
+      setTimeout(() => {
+        notification.remove();
+      }, 300);
+    }, 3000);
+
+    // 鼠标悬停时暂停关闭
+    notification.onmouseenter = () => clearTimeout(timeoutId);
+    notification.onmouseleave = () => {
+      setTimeout(() => {
+        notification.style.opacity = "0";
+        setTimeout(() => {
+          notification.remove();
+        }, 300);
+      }, 1500);
+    };
   }
 
   // 请求TTS并播放音频
