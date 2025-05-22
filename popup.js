@@ -6,6 +6,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const mergeMultilineCheckbox = document.getElementById("mergeMultilineCheckbox");
   const ttsVoiceSelect = document.getElementById("ttsVoiceSelect");
   const autoTtsCheckbox = document.getElementById("autoTtsCheckbox");
+  const hoverButtonsCheckbox = document.getElementById("hoverButtonsCheckbox");
 
   // 加载"合并多行"设置
   async function loadMergeSetting() {
@@ -49,6 +50,29 @@ document.addEventListener("DOMContentLoaded", () => {
       console.log("[Tiny Memo] 自动TTS设置已保存:", autoTtsCheckbox.checked);
     } catch (error) {
       console.error("[Tiny Memo] 保存自动TTS设置失败:", error);
+    }
+  });
+
+  // 加载"鼠标悬停按钮"设置
+  async function loadHoverButtonsSetting() {
+    try {
+      const data = await chrome.storage.local.get(["hoverButtonsSetting"]);
+      // 默认关闭
+      hoverButtonsCheckbox.checked = data.hoverButtonsSetting === true;
+      console.log("[Tiny Memo] 悬停按钮设置已加载:", hoverButtonsCheckbox.checked);
+    } catch (error) {
+      console.error("[Tiny Memo] 加载悬停按钮设置失败:", error);
+      hoverButtonsCheckbox.checked = false; // 出错时默认关闭
+    }
+  }
+
+  // 保存"鼠标悬停按钮"设置
+  hoverButtonsCheckbox.addEventListener("change", async () => {
+    try {
+      await chrome.storage.local.set({ hoverButtonsSetting: hoverButtonsCheckbox.checked });
+      console.log("[Tiny Memo] 悬停按钮设置已保存:", hoverButtonsCheckbox.checked);
+    } catch (error) {
+      console.error("[Tiny Memo] 保存悬停按钮设置失败:", error);
     }
   });
 
@@ -241,6 +265,7 @@ document.addEventListener("DOMContentLoaded", () => {
   loadMergeSetting(); // 加载合并设置
   loadTtsVoices(); // 加载TTS语音选项
   loadAutoTtsSetting(); // 加载自动TTS设置
+  loadHoverButtonsSetting(); // 加载悬停按钮设置
 
   // (可选) 监听存储变化，实时更新弹窗内容
   chrome.storage.onChanged.addListener((changes, namespace) => {
@@ -267,6 +292,10 @@ document.addEventListener("DOMContentLoaded", () => {
       if (changes.autoTtsSetting) {
         console.log("[Tiny Memo] autoTtsSetting changed in storage, reloading setting in popup.", changes.autoTtsSetting);
         autoTtsCheckbox.checked = changes.autoTtsSetting.newValue === true;
+      }
+      if (changes.hoverButtonsSetting) {
+        console.log("[Tiny Memo] hoverButtonsSetting changed in storage, reloading setting in popup.", changes.hoverButtonsSetting);
+        hoverButtonsCheckbox.checked = changes.hoverButtonsSetting.newValue === true;
       }
     }
   });

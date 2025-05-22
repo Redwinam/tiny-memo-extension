@@ -3,158 +3,401 @@
 
   let memoButton = null;
   let ttsButton = null;
-  const BUTTON_ID = "tiny-memo-inline-button";
-  const TTS_BUTTON_ID = "tiny-memo-tts-button";
-  let autoTtsEnabled = false;
-  let isAutoTtsPlaying = false;
+  let hoverMemoIcon = null;
+  let hoverTtsIcon = null;
 
-  // 加载自动TTS设置
-  chrome.storage.local.get(["autoTtsSetting"], (result) => {
+  const SELECTION_BUTTON_ID = "tiny-memo-selection-button";
+  const SELECTION_TTS_BUTTON_ID = "tiny-memo-selection-tts-button";
+  const HOVER_MEMO_ICON_ID = "tiny-memo-hover-memo-icon";
+  const HOVER_TTS_ICON_ID = "tiny-memo-hover-tts-icon";
+
+  // SVG Icons (light-colored)
+  const ADD_NOTE_ICON_SVG = `
+    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#e0e0e0" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+      <polyline points="14 2 14 8 20 8"></polyline>
+      <line x1="12" y1="18" x2="12" y2="12"></line>
+      <line x1="9" y1="15" x2="15" y2="15"></line>
+    </svg>`;
+
+  const PLAY_TTS_ICON_SVG = `
+    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#e0e0e0" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+      <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+    </svg>`;
+
+  let autoTtsEnabled = false;
+  let hoverButtonsEnabled = false;
+  let isAutoTtsPlaying = false;
+  let lastHoveredElement = null;
+  let hideHoverIconsTimeout = null;
+
+  // 加载设置
+  chrome.storage.local.get(["autoTtsSetting", "hoverButtonsSetting"], (result) => {
     autoTtsEnabled = result.autoTtsSetting === true;
-    console.log("[Tiny Memo - Inline Button] 自动TTS设置已加载:", autoTtsEnabled);
+    hoverButtonsEnabled = result.hoverButtonsSetting === true;
+    console.log("[Tiny Memo - Inline Button] 自动TTS设置:", autoTtsEnabled, "悬停按钮设置:", hoverButtonsEnabled);
   });
 
   // 监听存储变化，实时更新设置
   chrome.storage.onChanged.addListener((changes, namespace) => {
-    if (namespace === "local" && changes.autoTtsSetting) {
-      autoTtsEnabled = changes.autoTtsSetting.newValue === true;
-      console.log("[Tiny Memo - Inline Button] 自动TTS设置已更新:", autoTtsEnabled);
+    if (namespace === "local") {
+      if (changes.autoTtsSetting) {
+        autoTtsEnabled = changes.autoTtsSetting.newValue === true;
+        console.log("[Tiny Memo - Inline Button] 自动TTS设置已更新:", autoTtsEnabled);
+      }
+      if (changes.hoverButtonsSetting) {
+        hoverButtonsEnabled = changes.hoverButtonsSetting.newValue === true;
+        console.log("[Tiny Memo - Inline Button] 悬停按钮设置已更新:", hoverButtonsEnabled);
+        // 如果禁用了悬停按钮，立即隐藏它们
+        if (!hoverButtonsEnabled) {
+          hideHoverIcons();
+        }
+      }
     }
   });
 
-  function createButton() {
-    if (document.getElementById(BUTTON_ID)) return document.getElementById(BUTTON_ID);
-
+  function createSelectionButton(id, text, borderColor) {
     const button = document.createElement("button");
-    button.id = BUTTON_ID;
-    button.textContent = "添加到笔记"; // 或者用一个图标
-    // 基础样式
-    Object.assign(button.style, {
-      position: "absolute",
-      zIndex: "2147483646", //略低于通知的 z-index
-      backgroundColor: "#282c34",
-      color: "white",
-      border: "1px solid #4CAF50",
-      borderRadius: "4px",
-      padding: "5px 8px",
-      fontSize: "12px",
-      cursor: "pointer",
-      boxShadow: "0 2px 5px rgba(0,0,0,0.2)",
-      display: "none", // 默认隐藏
-    });
-
-    button.addEventListener("click", async (event) => {
-      event.stopPropagation(); // 防止点击事件冒泡到页面
-      const selection = window.getSelection();
-      const selectedText = selection.toString().trim();
-      if (selectedText) {
-        console.log("[Tiny Memo - Inline Button] Button clicked, sending text:", selectedText);
-        chrome.runtime.sendMessage({ type: "SELECTION_FROM_CONTENT_SCRIPT", text: selectedText }, (response) => {
-          if (chrome.runtime.lastError) {
-            console.error("[Tiny Memo - Inline Button] Error sending message:", chrome.runtime.lastError.message);
-            // alert('添加到笔记失败: ' + chrome.runtime.lastError.message);
-          } else {
-            console.log("[Tiny Memo - Inline Button] Message sent, background responded.");
-            // 成功发送后，按钮应该消失
-          }
-        });
-      }
-      hideButton(); // 点击后无论如何都隐藏按钮
-      hideTtsButton(); // 同时隐藏TTS按钮
-    });
-
-    document.body.appendChild(button);
-    return button;
-  }
-
-  function createTtsButton() {
-    if (document.getElementById(TTS_BUTTON_ID)) return document.getElementById(TTS_BUTTON_ID);
-
-    const button = document.createElement("button");
-    button.id = TTS_BUTTON_ID;
-    button.textContent = "播放语音"; // 或者用一个音频图标
-    // TTS按钮样式
+    button.id = id;
+    button.textContent = text;
     Object.assign(button.style, {
       position: "absolute",
       zIndex: "2147483646",
       backgroundColor: "#282c34",
       color: "white",
-      border: "1px solid #4285f4", // 使用蓝色边框区分
+      border: `1px solid ${borderColor}`,
       borderRadius: "4px",
       padding: "5px 8px",
       fontSize: "12px",
       cursor: "pointer",
       boxShadow: "0 2px 5px rgba(0,0,0,0.2)",
-      display: "none", // 默认隐藏
+      display: "none",
     });
-
-    button.addEventListener("click", async (event) => {
-      event.stopPropagation();
-      const selection = window.getSelection();
-      const selectedText = selection.toString().trim();
-      if (selectedText) {
-        console.log("[Tiny Memo - TTS Button] Button clicked, requesting TTS for:", selectedText);
-
-        // 显示加载状态
-        const originalText = button.textContent;
-        button.textContent = "加载中...";
-        button.disabled = true;
-
-        // 发送TTS请求给背景脚本
-        chrome.runtime.sendMessage({ type: "TTS_REQUEST", text: selectedText }, async (response) => {
-          button.disabled = false;
-          button.textContent = originalText;
-
-          if (chrome.runtime.lastError) {
-            console.error("[Tiny Memo - TTS Button] Error requesting TTS:", chrome.runtime.lastError.message);
-            showTtsErrorNotification("TTS请求失败: " + chrome.runtime.lastError.message);
-          } else if (response && response.success) {
-            console.log("[Tiny Memo - TTS Button] TTS audio URL received:", response.audio_url);
-
-            // 播放音频
-            playTtsAudio(response.audio_url);
-          } else {
-            console.error("[Tiny Memo - TTS Button] TTS request failed:", response?.error);
-            showTtsErrorNotification("TTS生成失败: " + (response?.error || "未知错误"));
-          }
-        });
-      }
-      // 不要立即隐藏按钮，用户可能想多次播放
-    });
-
     document.body.appendChild(button);
     return button;
   }
 
-  // 播放TTS音频
+  function createHoverIcon(id, svgIcon) {
+    const iconSpan = document.createElement("span");
+    iconSpan.id = id;
+    iconSpan.innerHTML = svgIcon;
+    iconSpan.dataset.tinyMemoIcon = "true"; // Mark as our icon
+    Object.assign(iconSpan.style, {
+      cursor: "pointer",
+      marginLeft: "5px",
+      marginRight: "3px",
+      verticalAlign: "middle", // Align with text
+      display: "none", // Initially hidden
+      lineHeight: "1", // Prevent extra spacing
+    });
+    // Event listeners will be added when shown/created
+    return iconSpan;
+  }
+
+  function getSelectionMemoButton() {
+    if (!memoButton) {
+      memoButton = createSelectionButton(SELECTION_BUTTON_ID, "添加到笔记", "#4CAF50");
+      memoButton.addEventListener("click", (event) => handleMemoButtonClick(event, window.getSelection().toString().trim(), true));
+    }
+    return memoButton;
+  }
+
+  function getSelectionTtsButton() {
+    if (!ttsButton) {
+      ttsButton = createSelectionButton(SELECTION_TTS_BUTTON_ID, "播放语音", "#4285f4");
+      ttsButton.addEventListener("click", (event) => handleTtsButtonClick(event, window.getSelection().toString().trim()));
+    }
+    return ttsButton;
+  }
+
+  function getHoverMemoIcon() {
+    if (!hoverMemoIcon) {
+      hoverMemoIcon = createHoverIcon(HOVER_MEMO_ICON_ID, ADD_NOTE_ICON_SVG);
+      hoverMemoIcon.addEventListener("click", (event) => {
+        if (lastHoveredElement) {
+          handleMemoButtonClick(event, lastHoveredElement.innerText.trim(), false);
+        }
+      });
+    }
+    return hoverMemoIcon;
+  }
+
+  function getHoverTtsIcon() {
+    if (!hoverTtsIcon) {
+      hoverTtsIcon = createHoverIcon(HOVER_TTS_ICON_ID, PLAY_TTS_ICON_SVG);
+      hoverTtsIcon.addEventListener("click", (event) => {
+        if (lastHoveredElement) {
+          handleTtsButtonClick(event, lastHoveredElement.innerText.trim());
+        }
+      });
+    }
+    return hoverTtsIcon;
+  }
+
+  function handleMemoButtonClick(event, text, fromSelection) {
+    event.stopPropagation();
+    if (text) {
+      console.log(`[Tiny Memo - ${fromSelection ? "Selection" : "Hover"} Button] Add to notes:`, text);
+      chrome.runtime.sendMessage({ type: "SELECTION_FROM_CONTENT_SCRIPT", text: text }, () => {
+        if (chrome.runtime.lastError) {
+          console.error("[Tiny Memo] Error sending note:", chrome.runtime.lastError.message);
+          return;
+        }
+        // Optionally show a success notification for hover-added notes
+        if (!fromSelection) {
+          showTemporarySuccessInIcon(event.currentTarget);
+        }
+      });
+    }
+    if (fromSelection) {
+      hideSelectionButtons();
+    } else {
+      // For hover icons, they might be removed by mouseout, or clicking could also hide them.
+      // Let's explicitly hide to give immediate feedback.
+      hideHoverIcons();
+    }
+  }
+
+  function showTemporarySuccessInIcon(iconElement) {
+    const originalIcon = iconElement.innerHTML;
+    // Checkmark SVG (or similar success indicator)
+    iconElement.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4CAF50" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>`;
+    setTimeout(() => {
+      if (document.body.contains(iconElement)) {
+        // Check if icon is still in DOM
+        iconElement.innerHTML = originalIcon;
+      }
+    }, 1500);
+  }
+
+  async function handleTtsButtonClick(event, text) {
+    event.stopPropagation();
+    const iconElement = event.currentTarget; // The clicked span/icon
+    if (text) {
+      console.log("[Tiny Memo - TTS Button] Requesting TTS for:", text);
+      // No loading state for icons to keep them simple, TTS happens quickly or shows error notification
+
+      chrome.runtime.sendMessage({ type: "TTS_REQUEST", text: text }, (response) => {
+        if (chrome.runtime.lastError) {
+          console.error("[Tiny Memo - TTS Button] Error requesting TTS:", chrome.runtime.lastError.message);
+          showTtsErrorNotification("TTS请求失败: " + chrome.runtime.lastError.message);
+        } else if (response && response.success && response.audio_url) {
+          console.log("[Tiny Memo - TTS Button] TTS audio URL received:", response.audio_url);
+          playTtsAudio(response.audio_url);
+        } else {
+          console.error("[Tiny Memo - TTS Button] TTS request failed:", response?.error);
+          showTtsErrorNotification("TTS生成失败: " + (response?.error || "未知错误"));
+        }
+      });
+    }
+  }
+
   function playTtsAudio(audioUrl) {
     const audio = new Audio(audioUrl);
     audio.play().catch((error) => {
-      console.error("[Tiny Memo - TTS Button] Error playing audio:", error);
+      console.error("[Tiny Memo - TTS Icon] Error playing audio:", error);
       showTtsErrorNotification("音频播放失败");
     });
   }
 
-  // 显示TTS错误通知
-  function showTtsErrorNotification(errorMessage) {
-    // 防止重复创建
-    const existingNotification = document.getElementById("tiny-memo-tts-error");
-    if (existingNotification) {
-      existingNotification.remove();
+  function requestAndPlayTts(text) {
+    if (!text || isAutoTtsPlaying) return;
+    isAutoTtsPlaying = true;
+    console.log("[Tiny Memo - Auto TTS] Requesting TTS for:", text);
+    chrome.runtime.sendMessage({ type: "TTS_REQUEST", text: text }, (response) => {
+      isAutoTtsPlaying = false;
+      if (chrome.runtime.lastError) {
+        console.error("[Tiny Memo - Auto TTS] Error requesting TTS:", chrome.runtime.lastError.message);
+      } else if (response && response.success && response.audio_url) {
+        console.log("[Tiny Memo - Auto TTS] TTS audio URL received:", response.audio_url);
+        playTtsAudio(response.audio_url);
+      } else {
+        console.error("[Tiny Memo - Auto TTS] TTS request failed:", response?.error);
+      }
+    });
+  }
+
+  function showSelectionButtons(x, y) {
+    const mButton = getSelectionMemoButton();
+    const tButton = getSelectionTtsButton();
+    mButton.style.left = `${x + 5}px`;
+    mButton.style.top = `${y + window.scrollY - 5}px`;
+    mButton.style.display = "block";
+
+    const memoWidth = mButton.getBoundingClientRect().width;
+    tButton.style.left = `${x + 15 + memoWidth}px`;
+    tButton.style.top = `${y + window.scrollY - 5}px`;
+    tButton.style.display = "block";
+  }
+
+  function hideSelectionButtons() {
+    if (memoButton && memoButton.style.display !== "none") memoButton.style.display = "none";
+    if (ttsButton && ttsButton.style.display !== "none") ttsButton.style.display = "none";
+  }
+
+  function showHoverIcons(element) {
+    if (!hoverButtonsEnabled || !element || !element.parentNode) return;
+
+    // If icons are already shown for this element, do nothing
+    if (lastHoveredElement === element && ((hoverMemoIcon && hoverMemoIcon.parentNode === element) || (hoverTtsIcon && hoverTtsIcon.parentNode === element))) {
+      clearTimeout(hideHoverIconsTimeout); // Keep them visible
+      return;
     }
 
-    console.log(`[Tiny Memo - TTS Button] Showing error notification: ${errorMessage}`);
+    // If icons are shown elsewhere, hide them first
+    if (lastHoveredElement && lastHoveredElement !== element) {
+      hideHoverIcons();
+    }
 
+    lastHoveredElement = element;
+    clearTimeout(hideHoverIconsTimeout);
+
+    const hMemoIcon = getHoverMemoIcon();
+    const hTtsIcon = getHoverTtsIcon();
+
+    // Append icons to the end of the element's content
+    // Ensure they are not already children of this element from a previous quick mouseover/out
+    if (hMemoIcon.parentNode !== element) element.appendChild(hMemoIcon);
+    if (hTtsIcon.parentNode !== element) element.appendChild(hTtsIcon);
+
+    hMemoIcon.style.display = "inline-block";
+    hTtsIcon.style.display = "inline-block";
+  }
+
+  function scheduleHideHoverIcons() {
+    clearTimeout(hideHoverIconsTimeout);
+    hideHoverIconsTimeout = setTimeout(() => {
+      hideHoverIcons();
+    }, 300);
+  }
+
+  function hideHoverIcons() {
+    if (hoverMemoIcon && hoverMemoIcon.parentNode) {
+      hoverMemoIcon.parentNode.removeChild(hoverMemoIcon);
+      hoverMemoIcon.style.display = "none";
+    }
+    if (hoverTtsIcon && hoverTtsIcon.parentNode) {
+      hoverTtsIcon.parentNode.removeChild(hoverTtsIcon);
+      hoverTtsIcon.style.display = "none";
+    }
+    if (lastHoveredElement === hoverMemoIcon?.parentNode || lastHoveredElement === hoverTtsIcon?.parentNode) {
+      lastHoveredElement = null;
+    }
+  }
+
+  // --- Event Listeners ---
+  document.addEventListener("mouseup", (event) => {
+    if (event.target.dataset.tinyMemoIcon || event.target.closest(`[data-tiny-memo-icon="true"]`) || event.target.id === SELECTION_BUTTON_ID || event.target.id === SELECTION_TTS_BUTTON_ID) return;
+
+    const selection = window.getSelection();
+    const selectedText = selection.toString().trim();
+
+    if (selectedText.length > 0) {
+      hideHoverIcons();
+      const range = selection.getRangeAt(0);
+      const rect = range.getBoundingClientRect();
+      showSelectionButtons(rect.right, rect.bottom);
+      if (autoTtsEnabled) {
+        requestAndPlayTts(selectedText);
+      }
+    } else {
+      hideSelectionButtons();
+    }
+  });
+
+  document.addEventListener(
+    "mousedown",
+    (event) => {
+      if (event.target.dataset.tinyMemoIcon || event.target.closest(`[data-tiny-memo-icon="true"]`) || event.target.id === SELECTION_BUTTON_ID || event.target.id === SELECTION_TTS_BUTTON_ID) return;
+
+      if ((memoButton && memoButton.style.display === "block") || (ttsButton && ttsButton.style.display === "block")) {
+        const selection = window.getSelection();
+        if (!selection || selection.isCollapsed || !selection.getRangeAt(0).toString().trim()) {
+          hideSelectionButtons();
+        }
+      }
+    },
+    true
+  );
+
+  let selectionHideTimeout = null;
+  document.addEventListener("selectionchange", () => {
+    clearTimeout(selectionHideTimeout);
+    selectionHideTimeout = setTimeout(() => {
+      const selection = window.getSelection();
+      if (!selection || selection.isCollapsed || !selection.getRangeAt(0).toString().trim()) {
+        if (document.activeElement && document.activeElement.id !== SELECTION_BUTTON_ID && document.activeElement.id !== SELECTION_TTS_BUTTON_ID && !document.activeElement.dataset.tinyMemoIcon && !document.activeElement.closest('[data-tiny-memo-icon="true"]')) {
+          hideSelectionButtons();
+        }
+      }
+    }, 150);
+  });
+
+  document.addEventListener("mouseover", (event) => {
+    if (!hoverButtonsEnabled || event.target.dataset.tinyMemoIcon || event.target.closest('[data-tiny-memo-icon="true"]')) {
+      if (event.target.dataset.tinyMemoIcon || event.target.closest('[data-tiny-memo-icon="true"]')) {
+        clearTimeout(hideHoverIconsTimeout); // Keep icons visible if mouse is over them
+      }
+      return;
+    }
+
+    const target = event.target;
+    if (
+      target.tagName &&
+      ["P", "SPAN", "DIV", "LI", "H1", "H2", "H3", "H4", "H5", "H6", "TD", "BLOCKQUOTE", "PRE"].includes(target.tagName.toUpperCase()) &&
+      target.innerText &&
+      target.innerText.trim().length > 10 &&
+      target.offsetHeight > 0 &&
+      target.offsetWidth > 0 && // Element is visible
+      !target.isContentEditable &&
+      window.getComputedStyle(target).visibility !== "hidden" &&
+      window.getComputedStyle(target).display !== "none" &&
+      !target.closest("button, input, textarea, select, a[href], label, summary")
+    ) {
+      if (lastHoveredElement !== target) {
+        hideHoverIcons(); // Hide from previous element if different
+        showHoverIcons(target);
+      } else {
+        clearTimeout(hideHoverIconsTimeout); // Mouse is still over the same element or moved back quickly
+      }
+    }
+  });
+
+  document.addEventListener("mouseout", (event) => {
+    if (!hoverButtonsEnabled) return;
+
+    const relatedTarget = event.relatedTarget;
+    const toElement = event.toElement;
+
+    // If mouse moves to one of our icons, or from an icon to its parent (the hovered element)
+    if ((relatedTarget && (relatedTarget.dataset.tinyMemoIcon || relatedTarget.closest('[data-tiny-memo-icon="true"]'))) || (toElement && (toElement.dataset.tinyMemoIcon || toElement.closest('[data-tiny-memo-icon="true"]')))) {
+      clearTimeout(hideHoverIconsTimeout); // Keep icons visible
+      return;
+    }
+
+    // If the mouse leaves the element that currently has the icons
+    if (lastHoveredElement && lastHoveredElement === event.target && !lastHoveredElement.contains(relatedTarget)) {
+      scheduleHideHoverIcons();
+    }
+  });
+
+  // Pre-create selection buttons
+  getSelectionMemoButton();
+  getSelectionTtsButton();
+  // Hover icons are created on demand by getHoverMemoIcon/getHoverTtsIcon and appended/removed dynamically
+
+  function showTtsErrorNotification(errorMessage) {
+    const existingNotification = document.getElementById("tiny-memo-tts-error");
+    if (existingNotification) existingNotification.remove();
     const notificationId = "tiny-memo-tts-error";
     const notification = document.createElement("div");
     notification.id = notificationId;
-
-    // 基本样式
     Object.assign(notification.style, {
       position: "fixed",
       top: "20px",
       right: "20px",
-      backgroundColor: "rgba(220, 53, 69, 0.9)", // 红色背景，表示错误
+      backgroundColor: "rgba(220, 53, 69, 0.9)",
       color: "#FFFFFF",
       padding: "12px 16px",
       borderRadius: "6px",
@@ -170,154 +413,29 @@
       transition: "opacity 0.3s ease-in-out",
       maxWidth: "300px",
     });
-
     const message = document.createElement("span");
     message.textContent = errorMessage;
     notification.appendChild(message);
-
     document.body.appendChild(notification);
-
-    // 动画显示
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         notification.style.opacity = "1";
       });
     });
-
-    // 3秒后自动关闭
     const timeoutId = setTimeout(() => {
       notification.style.opacity = "0";
       setTimeout(() => {
-        notification.remove();
+        if (notification.parentNode) notification.parentNode.removeChild(notification);
       }, 300);
     }, 3000);
-
-    // 鼠标悬停时暂停关闭
     notification.onmouseenter = () => clearTimeout(timeoutId);
     notification.onmouseleave = () => {
       setTimeout(() => {
         notification.style.opacity = "0";
         setTimeout(() => {
-          notification.remove();
+          if (notification.parentNode) notification.parentNode.removeChild(notification);
         }, 300);
       }, 1500);
     };
   }
-
-  // 请求TTS并播放音频
-  function requestAndPlayTts(text) {
-    if (!text || isAutoTtsPlaying) return;
-
-    isAutoTtsPlaying = true;
-    console.log("[Tiny Memo - Auto TTS] Requesting TTS for:", text);
-
-    chrome.runtime.sendMessage({ type: "TTS_REQUEST", text: text }, (response) => {
-      isAutoTtsPlaying = false;
-
-      if (chrome.runtime.lastError) {
-        console.error("[Tiny Memo - Auto TTS] Error requesting TTS:", chrome.runtime.lastError.message);
-      } else if (response && response.success) {
-        console.log("[Tiny Memo - Auto TTS] TTS audio URL received:", response.audio_url);
-        playTtsAudio(response.audio_url);
-      } else {
-        console.error("[Tiny Memo - Auto TTS] TTS request failed:", response?.error);
-      }
-    });
-  }
-
-  function showButton(x, y) {
-    if (!memoButton) memoButton = createButton();
-    if (memoButton) {
-      // 根据选区位置调整按钮位置
-      memoButton.style.left = `${x + 5}px`;
-      memoButton.style.top = `${y + window.scrollY - 5}px`;
-      memoButton.style.display = "block";
-      console.log("[Tiny Memo - Inline Button] Showing button at:", memoButton.style.left, memoButton.style.top);
-    }
-
-    // 同时显示TTS按钮，位置在保存按钮右边
-    if (!ttsButton) ttsButton = createTtsButton();
-    if (ttsButton) {
-      const memoWidth = memoButton.getBoundingClientRect().width;
-      ttsButton.style.left = `${x + 15 + memoWidth}px`;
-      ttsButton.style.top = `${y + window.scrollY - 5}px`;
-      ttsButton.style.display = "block";
-      console.log("[Tiny Memo - TTS Button] Showing button at:", ttsButton.style.left, ttsButton.style.top);
-    }
-  }
-
-  function hideButton() {
-    if (memoButton) {
-      memoButton.style.display = "none";
-      console.log("[Tiny Memo - Inline Button] Hiding button.");
-    }
-  }
-
-  function hideTtsButton() {
-    if (ttsButton) {
-      ttsButton.style.display = "none";
-      console.log("[Tiny Memo - TTS Button] Hiding button.");
-    }
-  }
-
-  document.addEventListener("mouseup", (event) => {
-    // 确保不是点击在我们的按钮上
-    if (event.target && (event.target.id === BUTTON_ID || event.target.id === TTS_BUTTON_ID)) return;
-
-    const selection = window.getSelection();
-    const selectedText = selection.toString().trim();
-
-    if (selectedText.length > 0) {
-      const range = selection.getRangeAt(0);
-      const rect = range.getBoundingClientRect();
-      // 显示按钮在选区的右下角
-      showButton(rect.right, rect.bottom);
-
-      // 如果启用了自动TTS，则自动朗读选中文本
-      if (autoTtsEnabled) {
-        requestAndPlayTts(selectedText);
-      }
-    } else {
-      hideButton();
-      hideTtsButton();
-    }
-  });
-
-  // 如果用户点击页面其他地方（非按钮也非新选区），也隐藏按钮
-  document.addEventListener(
-    "mousedown",
-    (event) => {
-      if ((memoButton && memoButton.style.display === "block") || (ttsButton && ttsButton.style.display === "block")) {
-        if (event.target.id !== BUTTON_ID && event.target.id !== TTS_BUTTON_ID && !memoButton.contains(event.target) && !ttsButton?.contains(event.target)) {
-          // 检查点击的是否是选区内的文本，如果是，则不立即隐藏，等待mouseup判断
-          const selection = window.getSelection();
-          if (!selection || selection.isCollapsed || !selection.getRangeAt(0).toString().trim()) {
-            hideButton();
-            hideTtsButton();
-          }
-        }
-      }
-    },
-    true
-  ); // 使用捕获阶段提前处理
-
-  // 如果选区改变（例如通过键盘），也隐藏按钮
-  // 但 selectionchange 触发非常频繁，需要小心处理
-  let hideButtonTimeout = null;
-  document.addEventListener("selectionchange", () => {
-    clearTimeout(hideButtonTimeout);
-    hideButtonTimeout = setTimeout(() => {
-      const selection = window.getSelection();
-      if (!selection || selection.isCollapsed || !selection.getRangeAt(0).toString().trim()) {
-        if (document.activeElement && document.activeElement.id !== BUTTON_ID && document.activeElement.id !== TTS_BUTTON_ID) {
-          // 确保焦点不在按钮上
-          hideButton();
-          hideTtsButton();
-        }
-      }
-    }, 150); // 稍微延迟一下，避免过于灵敏
-  });
-
-  memoButton = createButton(); // 预先创建按钮，但保持隐藏
-  ttsButton = createTtsButton(); // 预先创建TTS按钮，但保持隐藏
 })();
