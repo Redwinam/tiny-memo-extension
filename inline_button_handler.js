@@ -10,6 +10,7 @@
   const SELECTION_TTS_BUTTON_ID = "tiny-memo-selection-tts-button";
   const HOVER_MEMO_ICON_ID = "tiny-memo-hover-memo-icon";
   const HOVER_TTS_ICON_ID = "tiny-memo-hover-tts-icon";
+  const HOVER_CONTAINER_CLASS = "tiny-memo-hover-container";
 
   // SVG Icons (light-colored)
   const ADD_NOTE_ICON_SVG = `
@@ -31,6 +32,7 @@
   let isAutoTtsPlaying = false;
   let lastHoveredElement = null;
   let hideHoverIconsTimeout = null;
+  let iconsContainer = null;
 
   // 加载设置
   chrome.storage.local.get(["autoTtsSetting", "hoverButtonsSetting"], (result) => {
@@ -78,6 +80,39 @@
     return button;
   }
 
+  function createIconsContainer() {
+    if (iconsContainer) return iconsContainer;
+
+    const container = document.createElement("span");
+    container.className = HOVER_CONTAINER_CLASS;
+    container.dataset.tinyMemoContainer = "true";
+    Object.assign(container.style, {
+      display: "inline-block",
+      position: "relative",
+      zIndex: "2147483646",
+      // backgroundColor: "rgba(0,0,0,0.3)",
+      // borderRadius: "4px",
+      // padding: "2px 4px",
+      // marginLeft: "4px",
+      verticalAlign: "middle",
+      lineHeight: "1",
+      pointerEvents: "auto",
+    });
+
+    container.addEventListener("mouseenter", () => {
+      clearTimeout(hideHoverIconsTimeout);
+    });
+
+    container.addEventListener("mouseleave", () => {
+      if (lastHoveredElement && !lastHoveredElement.contains(container)) {
+        scheduleHideHoverIcons();
+      }
+    });
+
+    iconsContainer = container;
+    return container;
+  }
+
   function createHoverIcon(id, svgIcon) {
     const iconSpan = document.createElement("span");
     iconSpan.id = id;
@@ -85,11 +120,12 @@
     iconSpan.dataset.tinyMemoIcon = "true"; // Mark as our icon
     Object.assign(iconSpan.style, {
       cursor: "pointer",
-      marginLeft: "5px",
-      marginRight: "3px",
+      marginLeft: "4px",
+      marginRight: "4px",
       verticalAlign: "middle", // Align with text
-      display: "none", // Initially hidden
+      display: "inline-block",
       lineHeight: "1", // Prevent extra spacing
+      padding: "2px", // 增加点击区域
     });
     // Event listeners will be added when shown/created
     return iconSpan;
@@ -137,6 +173,8 @@
 
   function handleMemoButtonClick(event, text, fromSelection) {
     event.stopPropagation();
+    event.preventDefault(); // 防止任何默认行为
+
     if (text) {
       console.log(`[Tiny Memo - ${fromSelection ? "Selection" : "Hover"} Button] Add to notes:`, text);
       chrome.runtime.sendMessage({ type: "SELECTION_FROM_CONTENT_SCRIPT", text: text }, () => {
@@ -173,6 +211,8 @@
 
   async function handleTtsButtonClick(event, text) {
     event.stopPropagation();
+    event.preventDefault(); // 防止任何默认行为
+
     const iconElement = event.currentTarget; // The clicked span/icon
     if (text) {
       console.log("[Tiny Memo - TTS Button] Requesting TTS for:", text);
@@ -240,55 +280,53 @@
     if (!hoverButtonsEnabled || !element || !element.parentNode) return;
 
     // If icons are already shown for this element, do nothing
-    if (lastHoveredElement === element && ((hoverMemoIcon && hoverMemoIcon.parentNode === element) || (hoverTtsIcon && hoverTtsIcon.parentNode === element))) {
+    if (lastHoveredElement === element && document.querySelector(`.${HOVER_CONTAINER_CLASS}`)) {
       clearTimeout(hideHoverIconsTimeout); // Keep them visible
       return;
     }
 
-    // If icons are shown elsewhere, hide them first
-    if (lastHoveredElement && lastHoveredElement !== element) {
-      hideHoverIcons();
-    }
+    // Remove any existing icon containers
+    hideHoverIcons();
 
     lastHoveredElement = element;
     clearTimeout(hideHoverIconsTimeout);
 
+    // Create container and append icons to it
+    const container = createIconsContainer();
     const hMemoIcon = getHoverMemoIcon();
     const hTtsIcon = getHoverTtsIcon();
 
-    // Append icons to the end of the element's content
-    // Ensure they are not already children of this element from a previous quick mouseover/out
-    if (hMemoIcon.parentNode !== element) element.appendChild(hMemoIcon);
-    if (hTtsIcon.parentNode !== element) element.appendChild(hTtsIcon);
+    // Add icons to container
+    container.appendChild(hMemoIcon);
+    container.appendChild(hTtsIcon);
 
-    hMemoIcon.style.display = "inline-block";
-    hTtsIcon.style.display = "inline-block";
+    // 直接附加到元素末尾而不是放在viewport右侧
+    element.appendChild(container);
   }
 
   function scheduleHideHoverIcons() {
     clearTimeout(hideHoverIconsTimeout);
     hideHoverIconsTimeout = setTimeout(() => {
       hideHoverIcons();
-    }, 300);
+    }, 500); // 增加延迟，给用户更多时间移动到按钮上
   }
 
   function hideHoverIcons() {
-    if (hoverMemoIcon && hoverMemoIcon.parentNode) {
-      hoverMemoIcon.parentNode.removeChild(hoverMemoIcon);
-      hoverMemoIcon.style.display = "none";
+    // Remove container if it exists
+    const container = document.querySelector(`.${HOVER_CONTAINER_CLASS}`);
+    if (container) {
+      container.remove();
     }
-    if (hoverTtsIcon && hoverTtsIcon.parentNode) {
-      hoverTtsIcon.parentNode.removeChild(hoverTtsIcon);
-      hoverTtsIcon.style.display = "none";
-    }
-    if (lastHoveredElement === hoverMemoIcon?.parentNode || lastHoveredElement === hoverTtsIcon?.parentNode) {
-      lastHoveredElement = null;
-    }
+
+    // Reset state
+    lastHoveredElement = null;
+    currentHoverElement = null;
   }
 
   // --- Event Listeners ---
   document.addEventListener("mouseup", (event) => {
-    if (event.target.dataset.tinyMemoIcon || event.target.closest(`[data-tiny-memo-icon="true"]`) || event.target.id === SELECTION_BUTTON_ID || event.target.id === SELECTION_TTS_BUTTON_ID) return;
+    // Skip if clicked on our controls
+    if (event.target.dataset?.tinyMemoIcon || event.target.dataset?.tinyMemoContainer || event.target.closest(`[data-tiny-memo-icon="true"]`) || event.target.closest(`.${HOVER_CONTAINER_CLASS}`) || event.target.id === SELECTION_BUTTON_ID || event.target.id === SELECTION_TTS_BUTTON_ID) return;
 
     const selection = window.getSelection();
     const selectedText = selection.toString().trim();
@@ -309,7 +347,8 @@
   document.addEventListener(
     "mousedown",
     (event) => {
-      if (event.target.dataset.tinyMemoIcon || event.target.closest(`[data-tiny-memo-icon="true"]`) || event.target.id === SELECTION_BUTTON_ID || event.target.id === SELECTION_TTS_BUTTON_ID) return;
+      // Skip if clicked on our controls
+      if (event.target.dataset?.tinyMemoIcon || event.target.dataset?.tinyMemoContainer || event.target.closest(`[data-tiny-memo-icon="true"]`) || event.target.closest(`.${HOVER_CONTAINER_CLASS}`) || event.target.id === SELECTION_BUTTON_ID || event.target.id === SELECTION_TTS_BUTTON_ID) return;
 
       if ((memoButton && memoButton.style.display === "block") || (ttsButton && ttsButton.style.display === "block")) {
         const selection = window.getSelection();
@@ -327,65 +366,117 @@
     selectionHideTimeout = setTimeout(() => {
       const selection = window.getSelection();
       if (!selection || selection.isCollapsed || !selection.getRangeAt(0).toString().trim()) {
-        if (document.activeElement && document.activeElement.id !== SELECTION_BUTTON_ID && document.activeElement.id !== SELECTION_TTS_BUTTON_ID && !document.activeElement.dataset.tinyMemoIcon && !document.activeElement.closest('[data-tiny-memo-icon="true"]')) {
+        if (
+          document.activeElement &&
+          document.activeElement.id !== SELECTION_BUTTON_ID &&
+          document.activeElement.id !== SELECTION_TTS_BUTTON_ID &&
+          !document.activeElement.dataset?.tinyMemoIcon &&
+          !document.activeElement.dataset?.tinyMemoContainer &&
+          !document.activeElement.closest('[data-tiny-memo-icon="true"]') &&
+          !document.activeElement.closest(`.${HOVER_CONTAINER_CLASS}`)
+        ) {
           hideSelectionButtons();
         }
       }
     }, 150);
   });
 
+  // Track the element that currently has hover icons
+  let currentHoverElement = null;
+
   document.addEventListener("mouseover", (event) => {
-    if (!hoverButtonsEnabled || event.target.dataset.tinyMemoIcon || event.target.closest('[data-tiny-memo-icon="true"]')) {
-      if (event.target.dataset.tinyMemoIcon || event.target.closest('[data-tiny-memo-icon="true"]')) {
-        clearTimeout(hideHoverIconsTimeout); // Keep icons visible if mouse is over them
-      }
+    if (!hoverButtonsEnabled) return;
+
+    // 如果正在悬停在我们的图标/容器上，不要做任何改变
+    if (event.target.dataset?.tinyMemoIcon || event.target.dataset?.tinyMemoContainer || event.target.closest(`[data-tiny-memo-icon="true"]`) || event.target.closest(`.${HOVER_CONTAINER_CLASS}`)) {
+      clearTimeout(hideHoverIconsTimeout); // 保持图标可见
       return;
     }
 
-    const target = event.target;
-    if (
-      target.tagName &&
-      ["P", "SPAN", "DIV", "LI", "H1", "H2", "H3", "H4", "H5", "H6", "TD", "BLOCKQUOTE", "PRE"].includes(target.tagName.toUpperCase()) &&
-      target.innerText &&
-      target.innerText.trim().length > 10 &&
-      target.offsetHeight > 0 &&
-      target.offsetWidth > 0 && // Element is visible
-      !target.isContentEditable &&
-      window.getComputedStyle(target).visibility !== "hidden" &&
-      window.getComputedStyle(target).display !== "none" &&
-      !target.closest("button, input, textarea, select, a[href], label, summary")
-    ) {
-      if (lastHoveredElement !== target) {
-        hideHoverIcons(); // Hide from previous element if different
-        showHoverIcons(target);
-      } else {
-        clearTimeout(hideHoverIconsTimeout); // Mouse is still over the same element or moved back quickly
+    const target = findHoverableParent(event.target);
+
+    // 如果找到了有效的可悬停元素
+    if (target) {
+      // 如果已经在这个元素上显示了，不做任何事
+      if (currentHoverElement === target && document.querySelector(`.${HOVER_CONTAINER_CLASS}`)) {
+        clearTimeout(hideHoverIconsTimeout);
+        return;
       }
+
+      // 移除上一个元素的图标
+      if (currentHoverElement && currentHoverElement !== target) {
+        hideHoverIcons();
+      }
+
+      // 为新元素显示图标
+      currentHoverElement = target;
+      showHoverIcons(target);
     }
   });
+
+  // Find a valid parent element to hover on
+  function findHoverableParent(element) {
+    // 跳过我们自己的控件元素
+    if (!element || element.dataset?.tinyMemoIcon || element.dataset?.tinyMemoContainer || element.closest('[data-tiny-memo-icon="true"]') || element.closest(`.${HOVER_CONTAINER_CLASS}`)) {
+      return null;
+    }
+
+    // 从元素本身开始
+    let current = element;
+
+    // 向上遍历DOM树查找合适的容器
+    while (current && current !== document.body) {
+      // 主要检查段落元素
+      if (
+        current.tagName &&
+        ["P", "DIV", "LI", "H1", "H2", "H3", "H4", "H5", "H6", "ARTICLE", "SECTION"].includes(current.tagName.toUpperCase()) &&
+        current.innerText &&
+        current.innerText.trim().length > 10 && // 包含足够的文本
+        current.offsetHeight > 0 &&
+        current.offsetWidth > 0 &&
+        !current.isContentEditable &&
+        !current.contains(document.querySelector(`.${HOVER_CONTAINER_CLASS}`)) && // 避免重复添加
+        window.getComputedStyle(current).visibility !== "hidden" &&
+        window.getComputedStyle(current).display !== "none" &&
+        !current.closest("button, input, textarea, select, a[href], label, summary")
+      ) {
+        return current;
+      }
+      current = current.parentElement;
+    }
+
+    return null;
+  }
 
   document.addEventListener("mouseout", (event) => {
     if (!hoverButtonsEnabled) return;
 
     const relatedTarget = event.relatedTarget;
-    const toElement = event.toElement;
 
-    // If mouse moves to one of our icons, or from an icon to its parent (the hovered element)
-    if ((relatedTarget && (relatedTarget.dataset.tinyMemoIcon || relatedTarget.closest('[data-tiny-memo-icon="true"]'))) || (toElement && (toElement.dataset.tinyMemoIcon || toElement.closest('[data-tiny-memo-icon="true"]')))) {
-      clearTimeout(hideHoverIconsTimeout); // Keep icons visible
+    // 不要隐藏，如果鼠标移动到我们的图标或容器上
+    if (relatedTarget && (relatedTarget.dataset?.tinyMemoIcon || relatedTarget.dataset?.tinyMemoContainer || relatedTarget.closest('[data-tiny-memo-icon="true"]') || relatedTarget.closest(`.${HOVER_CONTAINER_CLASS}`))) {
       return;
     }
 
-    // If the mouse leaves the element that currently has the icons
-    if (lastHoveredElement && lastHoveredElement === event.target && !lastHoveredElement.contains(relatedTarget)) {
-      scheduleHideHoverIcons();
+    // 检查我们是否离开了一个已悬停的元素
+    if (currentHoverElement) {
+      // 检查relatedTarget是否是当前悬停元素的子元素
+      if (currentHoverElement.contains(relatedTarget)) {
+        return; // 仍然在悬停元素内部，不要隐藏
+      }
+
+      // 检查我们是否移动到另一个有效的可悬停元素
+      const targetHoverable = findHoverableParent(relatedTarget);
+      if (!targetHoverable) {
+        // 如果不是移动到另一个可悬停元素或我们的图标，则安排隐藏
+        scheduleHideHoverIcons();
+      }
     }
   });
 
   // Pre-create selection buttons
   getSelectionMemoButton();
   getSelectionTtsButton();
-  // Hover icons are created on demand by getHoverMemoIcon/getHoverTtsIcon and appended/removed dynamically
 
   function showTtsErrorNotification(errorMessage) {
     const existingNotification = document.getElementById("tiny-memo-tts-error");
