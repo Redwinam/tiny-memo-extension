@@ -95,12 +95,13 @@
     container.dataset.tinyMemoContainer = "true";
     Object.assign(container.style, {
       display: "inline-block",
-      position: "relative",
+      position: "absolute",
       zIndex: "2147483646",
-      // backgroundColor: "rgba(0,0,0,0.3)",
-      // borderRadius: "4px",
-      // padding: "2px 4px",
-      // marginLeft: "4px",
+      backgroundColor: "rgba(0,0,0,0.2)",
+      borderRadius: "4px",
+      padding: "2px 4px",
+      right: "10px",
+      top: "0",
       verticalAlign: "middle",
       lineHeight: "1",
       pointerEvents: "auto",
@@ -184,17 +185,31 @@
 
     if (text) {
       console.log(`[Tiny Memo - ${fromSelection ? "Selection" : "Hover"} Button] Add to notes:`, text);
-      chrome.runtime.sendMessage({ type: "SELECTION_FROM_CONTENT_SCRIPT", text: text }, () => {
-        if (chrome.runtime.lastError) {
-          console.error("[Tiny Memo] Error sending note:", chrome.runtime.lastError.message);
+
+      try {
+        if (!chrome || !chrome.runtime) {
+          console.error("[Tiny Memo] Chrome runtime not available");
+          showTtsErrorNotification("浏览器扩展环境不可用，请刷新页面");
           return;
         }
-        // Optionally show a success notification for hover-added notes
-        if (!fromSelection) {
-          showTemporarySuccessInIcon(event.currentTarget);
-        }
-      });
+
+        chrome.runtime.sendMessage({ type: "SELECTION_FROM_CONTENT_SCRIPT", text: text }, () => {
+          if (chrome.runtime.lastError) {
+            console.error("[Tiny Memo] Error sending note:", chrome.runtime.lastError.message);
+            showTtsErrorNotification("添加笔记失败: " + chrome.runtime.lastError.message);
+            return;
+          }
+          // Optionally show a success notification for hover-added notes
+          if (!fromSelection) {
+            showTemporarySuccessInIcon(event.currentTarget);
+          }
+        });
+      } catch (error) {
+        console.error("[Tiny Memo] Error in sending note:", error);
+        showTtsErrorNotification("添加笔记出错: " + error.message);
+      }
     }
+
     if (fromSelection) {
       hideSelectionButtons();
     } else {
@@ -225,18 +240,29 @@
       console.log("[Tiny Memo - TTS Button] Requesting TTS for:", text);
       // No loading state for icons to keep them simple, TTS happens quickly or shows error notification
 
-      chrome.runtime.sendMessage({ type: "TTS_REQUEST", text: text }, (response) => {
-        if (chrome.runtime.lastError) {
-          console.error("[Tiny Memo - TTS Button] Error requesting TTS:", chrome.runtime.lastError.message);
-          showTtsErrorNotification("TTS请求失败: " + chrome.runtime.lastError.message);
-        } else if (response && response.success && response.audio_url) {
-          console.log("[Tiny Memo - TTS Button] TTS audio URL received:", response.audio_url);
-          playTtsAudio(response.audio_url);
-        } else {
-          console.error("[Tiny Memo - TTS Button] TTS request failed:", response?.error);
-          showTtsErrorNotification("TTS生成失败: " + (response?.error || "未知错误"));
+      try {
+        if (!chrome || !chrome.runtime) {
+          console.error("[Tiny Memo - TTS Button] Chrome runtime not available");
+          showTtsErrorNotification("浏览器扩展环境不可用，请刷新页面");
+          return;
         }
-      });
+
+        chrome.runtime.sendMessage({ type: "TTS_REQUEST", text: text }, (response) => {
+          if (chrome.runtime.lastError) {
+            console.error("[Tiny Memo - TTS Button] Error requesting TTS:", chrome.runtime.lastError.message);
+            showTtsErrorNotification("TTS请求失败: " + chrome.runtime.lastError.message);
+          } else if (response && response.success && response.audio_url) {
+            console.log("[Tiny Memo - TTS Button] TTS audio URL received:", response.audio_url);
+            playTtsAudio(response.audio_url);
+          } else {
+            console.error("[Tiny Memo - TTS Button] TTS request failed:", response?.error);
+            showTtsErrorNotification("TTS生成失败: " + (response?.error || "未知错误"));
+          }
+        });
+      } catch (error) {
+        console.error("[Tiny Memo - TTS Button] Error in TTS request:", error);
+        showTtsErrorNotification("TTS请求出错: " + error.message);
+      }
     }
   }
 
@@ -252,17 +278,29 @@
     if (!text || isAutoTtsPlaying) return;
     isAutoTtsPlaying = true;
     console.log("[Tiny Memo - Auto TTS] Requesting TTS for:", text);
-    chrome.runtime.sendMessage({ type: "TTS_REQUEST", text: text }, (response) => {
-      isAutoTtsPlaying = false;
-      if (chrome.runtime.lastError) {
-        console.error("[Tiny Memo - Auto TTS] Error requesting TTS:", chrome.runtime.lastError.message);
-      } else if (response && response.success && response.audio_url) {
-        console.log("[Tiny Memo - Auto TTS] TTS audio URL received:", response.audio_url);
-        playTtsAudio(response.audio_url);
-      } else {
-        console.error("[Tiny Memo - Auto TTS] TTS request failed:", response?.error);
+
+    try {
+      if (!chrome || !chrome.runtime) {
+        console.error("[Tiny Memo - Auto TTS] Chrome runtime not available");
+        isAutoTtsPlaying = false;
+        return;
       }
-    });
+
+      chrome.runtime.sendMessage({ type: "TTS_REQUEST", text: text }, (response) => {
+        isAutoTtsPlaying = false;
+        if (chrome.runtime.lastError) {
+          console.error("[Tiny Memo - Auto TTS] Error requesting TTS:", chrome.runtime.lastError.message);
+        } else if (response && response.success && response.audio_url) {
+          console.log("[Tiny Memo - Auto TTS] TTS audio URL received:", response.audio_url);
+          playTtsAudio(response.audio_url);
+        } else {
+          console.error("[Tiny Memo - Auto TTS] TTS request failed:", response?.error);
+        }
+      });
+    } catch (error) {
+      console.error("[Tiny Memo - Auto TTS] Error in TTS request:", error);
+      isAutoTtsPlaying = false;
+    }
   }
 
   function showSelectionButtons(x, y) {
@@ -312,8 +350,14 @@
     container.appendChild(hMemoIcon);
     container.appendChild(hTtsIcon);
 
-    // 直接附加到元素末尾而不是放在viewport右侧
+    // 放置容器在元素的上方右侧
     try {
+      // 设置元素为相对定位，这样绝对定位的容器会基于它
+      const originalPosition = element.style.position;
+      if (originalPosition !== "absolute" && originalPosition !== "fixed" && originalPosition !== "relative") {
+        element.style.position = "relative";
+      }
+
       element.appendChild(container);
       console.log("[Tiny Memo] 已添加悬停图标到元素:", element);
     } catch (error) {
@@ -568,21 +612,34 @@
       if (!hoverButtonsEnabled) return;
 
       let shouldScan = false;
+      let addedNodes = [];
 
       // 检查是否有新元素添加
       for (const mutation of mutations) {
         if (mutation.type === "childList" && mutation.addedNodes.length > 0) {
           shouldScan = true;
-          break;
+          mutation.addedNodes.forEach((node) => {
+            if (node.nodeType === 1) {
+              // 元素节点
+              addedNodes.push(node);
+            }
+          });
         }
       }
 
-      // 如果有新元素添加，延迟一点扫描页面
-      if (shouldScan) {
-        setTimeout(() => {
-          console.log("[Tiny Memo] 检测到DOM变化，扫描新元素");
+      // 如果有新元素添加，处理这些元素
+      if (shouldScan && addedNodes.length > 0) {
+        // 使用防抖函数延迟处理，避免频繁触发
+        clearTimeout(domMutationTimeout);
+        domMutationTimeout = setTimeout(() => {
+          console.log(`[Tiny Memo] 检测到DOM变化，有 ${addedNodes.length} 个新元素`);
+
+          // 1. 检查这些新元素是否匹配我们的配置
+          processNewElements(addedNodes);
+
+          // 2. 定期全面扫描，确保不遗漏
           scanPageForHoverableElements();
-        }, 500);
+        }, 300);
       }
     });
 
@@ -597,6 +654,75 @@
 
     console.log("[Tiny Memo] MutationObserver已启动");
   }
+
+  // 处理新添加的元素
+  function processNewElements(nodes) {
+    if (!nodes || nodes.length === 0) return;
+
+    // 获取当前域名
+    const currentDomain = window.location.hostname;
+
+    // 查找匹配当前域名的配置
+    const matchingConfigs = siteConfigs.filter((config) => currentDomain === config.domain || currentDomain.endsWith(`.${config.domain}`) || config.domain === "*");
+
+    // 如果没有匹配的域名配置，则不处理
+    if (matchingConfigs.length === 0 && siteConfigs.length > 0) {
+      return;
+    }
+
+    // 对每个配置，检查新节点是否匹配
+    matchingConfigs.forEach((config) => {
+      try {
+        if (config.selector && config.selector !== "*") {
+          // 检查每个新节点
+          nodes.forEach((node) => {
+            // 检查节点本身是否匹配选择器
+            try {
+              if (node.matches && node.matches(config.selector)) {
+                console.log("[Tiny Memo] 发现匹配的新容器元素:", node);
+                processContainerForTextElements(node);
+              }
+            } catch (e) {
+              // 忽略选择器匹配错误
+            }
+
+            // 检查节点是否包含匹配选择器的元素
+            try {
+              if (node.querySelectorAll) {
+                const matchingElements = node.querySelectorAll(config.selector);
+                if (matchingElements.length > 0) {
+                  console.log(`[Tiny Memo] 在新节点中找到 ${matchingElements.length} 个匹配容器`);
+                  matchingElements.forEach((el) => processContainerForTextElements(el));
+                }
+              }
+            } catch (e) {
+              console.error("[Tiny Memo] 查询子元素时出错:", e);
+            }
+
+            // 检查该节点是否是匹配容器内的文本元素
+            try {
+              const container = node.closest && node.closest(config.selector);
+              if (container) {
+                // 如果新节点在容器内，直接检查它是否是文本元素
+                if (node.innerText && node.innerText.trim().length > 10) {
+                  if (!node.dataset.tinyMemoScanned && !node.isContentEditable && node.offsetHeight > 0 && node.offsetWidth > 0) {
+                    node.dataset.tinyMemoScanned = "true";
+                    console.log("[Tiny Memo] 标记容器内的新文本元素:", node.tagName);
+                  }
+                }
+              }
+            } catch (e) {
+              // 忽略closest查询错误
+            }
+          });
+        }
+      } catch (error) {
+        console.error("[Tiny Memo] 处理新元素时出错:", error);
+      }
+    });
+  }
+
+  let domMutationTimeout = null;
 
   // 扫描页面寻找可悬停元素
   function scanPageForHoverableElements() {
@@ -618,22 +744,105 @@
       try {
         if (config.selector && config.selector !== "*") {
           // 使用配置的选择器查找元素
-          const elements = document.querySelectorAll(config.selector);
-          console.log(`[Tiny Memo] 在配置 ${config.domain} 下找到 ${elements.length} 个匹配元素`);
+          const containerElements = document.querySelectorAll(config.selector);
+          console.log(`[Tiny Memo] 在配置 ${config.domain} 下找到 ${containerElements.length} 个容器元素`);
 
-          // 对找到的每个元素进行检查
-          elements.forEach((element) => {
-            // 确保元素没有包含我们的容器，以避免重复添加
-            if (element && !element.querySelector(`.${HOVER_CONTAINER_CLASS}`) && element.innerText && element.innerText.trim().length > 10) {
-              // 将元素标记为已处理，这样鼠标悬停时就能正确识别
-              element.dataset.tinyMemoScanned = "true";
+          if (containerElements.length === 0) {
+            // 尝试使用更宽松的选择器
+            console.log(`[Tiny Memo] 尝试使用更宽松的选择器: ${config.selector.split(" ")[0]}`);
+            const baseSelector = config.selector.split(" ")[0]; // 获取选择器的第一部分
+            if (baseSelector && baseSelector !== config.selector) {
+              const alternativeElements = document.querySelectorAll(baseSelector);
+              if (alternativeElements.length > 0) {
+                console.log(`[Tiny Memo] 使用宽松选择器找到 ${alternativeElements.length} 个元素`);
+              }
             }
+          }
+
+          // 对找到的每个容器元素，扫描其内部的文本块
+          containerElements.forEach((container) => {
+            // 1. 找出所有的段落和文本元素
+            processContainerForTextElements(container);
           });
         }
       } catch (error) {
         console.error("[Tiny Memo] 扫描元素时出错:", error);
       }
     });
+  }
+
+  // 处理容器内的文本元素
+  function processContainerForTextElements(container) {
+    if (!container) return;
+
+    console.log("[Tiny Memo] 处理容器:", container);
+
+    // 查找容器内的文本块元素
+    const textElementTags = ["P", "H1", "H2", "H3", "H4", "H5", "H6", "LI", "DIV", "SPAN", "ARTICLE", "SECTION"];
+    const potentialTextElements = [];
+
+    // 方法1: 直接查找常见文本元素标签下的所有元素（包括嵌套元素）
+    textElementTags.forEach((tag) => {
+      // 先获取直接子元素
+      const elements = container.querySelectorAll(`:scope > ${tag}, ${tag}`);
+      elements.forEach((el) => {
+        // 确保元素有足够的文本内容
+        if (el.innerText && el.innerText.trim().length > 10) {
+          potentialTextElements.push(el);
+        }
+      });
+    });
+
+    // 方法2: 递归查找容器内所有子元素
+    function findTextElements(element) {
+      if (!element || element.nodeType !== 1) return;
+
+      // 检查当前元素是否有足够的文本内容
+      if (element.innerText && element.innerText.trim().length > 10 && !potentialTextElements.includes(element)) {
+        potentialTextElements.push(element);
+      }
+
+      // 递归检查所有子元素
+      if (element.children && element.children.length > 0) {
+        Array.from(element.children).forEach((child) => {
+          findTextElements(child);
+        });
+      }
+    }
+
+    // 递归查找所有子元素
+    findTextElements(container);
+
+    console.log(`[Tiny Memo] 找到 ${potentialTextElements.length} 个潜在文本元素`);
+
+    // 标记这些元素为可悬停
+    potentialTextElements.forEach((element) => {
+      markAsHoverable(element);
+    });
+  }
+
+  // 将元素标记为可悬停
+  function markAsHoverable(element) {
+    if (!element) return;
+
+    try {
+      if (
+        !element.dataset.tinyMemoScanned &&
+        !element.querySelector(`.${HOVER_CONTAINER_CLASS}`) &&
+        !element.isContentEditable &&
+        element.offsetHeight > 0 &&
+        element.offsetWidth > 0 &&
+        window.getComputedStyle(element).visibility !== "hidden" &&
+        window.getComputedStyle(element).display !== "none" &&
+        !element.closest("button, input, textarea, select, a[href], label, summary")
+      ) {
+        // 标记为已扫描，这样鼠标悬停时能识别
+        element.dataset.tinyMemoScanned = "true";
+        console.log("[Tiny Memo] 标记文本元素:", element.tagName, element.innerText.substring(0, 20) + "...");
+      }
+    } catch (error) {
+      console.error("[Tiny Memo] 标记元素时出错:", error);
+    }
   }
 
   // 初始延迟后启动观察器
