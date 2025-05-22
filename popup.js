@@ -8,6 +8,16 @@ document.addEventListener("DOMContentLoaded", () => {
   const autoTtsCheckbox = document.getElementById("autoTtsCheckbox");
   const hoverButtonsCheckbox = document.getElementById("hoverButtonsCheckbox");
 
+  // 网站配置相关元素
+  const siteConfigList = document.getElementById("siteConfigList");
+  const addSiteConfigBtn = document.getElementById("addSiteConfigBtn");
+  const getCurrentSiteBtn = document.getElementById("getCurrentSiteBtn");
+  const configModal = document.getElementById("configModal");
+  const domainInput = document.getElementById("domainInput");
+  const selectorInput = document.getElementById("selectorInput");
+  const saveConfigBtn = document.getElementById("saveConfigBtn");
+  const cancelConfigBtn = document.getElementById("cancelConfigBtn");
+
   // 加载"合并多行"设置
   async function loadMergeSetting() {
     try {
@@ -261,11 +271,172 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
+  // 加载网站元素配置
+  async function loadSiteConfigs() {
+    try {
+      const data = await chrome.storage.local.get(["siteConfigs"]);
+      const configs = data.siteConfigs || [];
+      renderSiteConfigs(configs);
+      console.log("[Tiny Memo] 网站配置已加载:", configs);
+    } catch (error) {
+      console.error("[Tiny Memo] 加载网站配置失败:", error);
+    }
+  }
+
+  // 渲染网站配置列表
+  function renderSiteConfigs(configs) {
+    siteConfigList.innerHTML = "";
+    if (configs.length === 0) {
+      const emptyMsg = document.createElement("div");
+      emptyMsg.textContent = '暂无配置，点击"添加配置"按钮开始添加';
+      emptyMsg.style.color = "#666";
+      emptyMsg.style.fontSize = "12px";
+      emptyMsg.style.padding = "5px";
+      siteConfigList.appendChild(emptyMsg);
+      return;
+    }
+
+    configs.forEach((config, index) => {
+      const configItem = document.createElement("div");
+      configItem.style.display = "flex";
+      configItem.style.justifyContent = "space-between";
+      configItem.style.alignItems = "center";
+      configItem.style.padding = "3px 0";
+      configItem.style.borderBottom = index < configs.length - 1 ? "1px solid #eee" : "none";
+
+      const configText = document.createElement("div");
+      configText.textContent = `${config.domain} → ${config.selector}`;
+      configText.style.fontSize = "12px";
+      configText.style.overflow = "hidden";
+      configText.style.textOverflow = "ellipsis";
+      configText.style.whiteSpace = "nowrap";
+      configText.style.marginRight = "5px";
+
+      const deleteBtn = document.createElement("button");
+      deleteBtn.textContent = "×";
+      deleteBtn.style.backgroundColor = "transparent";
+      deleteBtn.style.border = "none";
+      deleteBtn.style.color = "#999";
+      deleteBtn.style.cursor = "pointer";
+      deleteBtn.style.fontSize = "14px";
+      deleteBtn.style.padding = "0 5px";
+      deleteBtn.title = "删除配置";
+
+      deleteBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        deleteSiteConfig(index);
+      });
+
+      configItem.appendChild(configText);
+      configItem.appendChild(deleteBtn);
+      siteConfigList.appendChild(configItem);
+    });
+  }
+
+  // 删除网站配置
+  async function deleteSiteConfig(index) {
+    try {
+      const data = await chrome.storage.local.get(["siteConfigs"]);
+      const configs = data.siteConfigs || [];
+      if (index >= 0 && index < configs.length) {
+        configs.splice(index, 1);
+        await chrome.storage.local.set({ siteConfigs: configs });
+        renderSiteConfigs(configs);
+        console.log("[Tiny Memo] 网站配置已删除");
+      }
+    } catch (error) {
+      console.error("[Tiny Memo] 删除网站配置失败:", error);
+    }
+  }
+
+  // 添加网站配置
+  async function addSiteConfig(domain, selector) {
+    try {
+      if (!domain || !selector) return false;
+
+      const data = await chrome.storage.local.get(["siteConfigs"]);
+      const configs = data.siteConfigs || [];
+
+      // 检查是否已存在相同配置
+      const exists = configs.some((config) => config.domain === domain && config.selector === selector);
+
+      if (!exists) {
+        configs.push({ domain, selector });
+        await chrome.storage.local.set({ siteConfigs: configs });
+        renderSiteConfigs(configs);
+        console.log("[Tiny Memo] 网站配置已添加:", { domain, selector });
+        return true;
+      } else {
+        alert("该配置已存在");
+        return false;
+      }
+    } catch (error) {
+      console.error("[Tiny Memo] 添加网站配置失败:", error);
+      return false;
+    }
+  }
+
+  // 显示配置模态框
+  addSiteConfigBtn.addEventListener("click", () => {
+    domainInput.value = "";
+    selectorInput.value = "";
+    configModal.style.display = "block";
+  });
+
+  // 获取当前网站信息
+  getCurrentSiteBtn.addEventListener("click", async () => {
+    try {
+      // 获取当前活动标签页
+      const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (tabs.length > 0) {
+        const url = new URL(tabs[0].url);
+        domainInput.value = url.hostname;
+        configModal.style.display = "block";
+      }
+    } catch (error) {
+      console.error("[Tiny Memo] 获取当前网站失败:", error);
+    }
+  });
+
+  // 保存配置
+  saveConfigBtn.addEventListener("click", async () => {
+    const domain = domainInput.value.trim();
+    const selector = selectorInput.value.trim();
+
+    if (!domain) {
+      alert("请输入网站域名");
+      return;
+    }
+
+    if (!selector) {
+      alert("请输入CSS选择器");
+      return;
+    }
+
+    const success = await addSiteConfig(domain, selector);
+    if (success) {
+      configModal.style.display = "none";
+    }
+  });
+
+  // 取消配置
+  cancelConfigBtn.addEventListener("click", () => {
+    configModal.style.display = "none";
+  });
+
+  // 点击模态框外部关闭
+  configModal.addEventListener("click", (e) => {
+    if (e.target === configModal) {
+      configModal.style.display = "none";
+    }
+  });
+
   loadNotes(); // 弹窗加载时即显示笔记
   loadMergeSetting(); // 加载合并设置
   loadTtsVoices(); // 加载TTS语音选项
   loadAutoTtsSetting(); // 加载自动TTS设置
   loadHoverButtonsSetting(); // 加载悬停按钮设置
+  loadSiteConfigs(); // 加载网站配置
 
   // (可选) 监听存储变化，实时更新弹窗内容
   chrome.storage.onChanged.addListener((changes, namespace) => {
@@ -296,6 +467,10 @@ document.addEventListener("DOMContentLoaded", () => {
       if (changes.hoverButtonsSetting) {
         console.log("[Tiny Memo] hoverButtonsSetting changed in storage, reloading setting in popup.", changes.hoverButtonsSetting);
         hoverButtonsCheckbox.checked = changes.hoverButtonsSetting.newValue === true;
+      }
+      if (changes.siteConfigs) {
+        console.log("[Tiny Memo] siteConfigs changed in storage, reloading configs in popup.", changes.siteConfigs);
+        renderSiteConfigs(changes.siteConfigs.newValue || []);
       }
     }
   });

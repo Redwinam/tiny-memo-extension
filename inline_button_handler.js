@@ -33,12 +33,15 @@
   let lastHoveredElement = null;
   let hideHoverIconsTimeout = null;
   let iconsContainer = null;
+  let siteConfigs = []; // 存储网站配置
 
   // 加载设置
-  chrome.storage.local.get(["autoTtsSetting", "hoverButtonsSetting"], (result) => {
+  chrome.storage.local.get(["autoTtsSetting", "hoverButtonsSetting", "siteConfigs"], (result) => {
     autoTtsEnabled = result.autoTtsSetting === true;
     hoverButtonsEnabled = result.hoverButtonsSetting === true;
+    siteConfigs = result.siteConfigs || [];
     console.log("[Tiny Memo - Inline Button] 自动TTS设置:", autoTtsEnabled, "悬停按钮设置:", hoverButtonsEnabled);
+    console.log("[Tiny Memo - Inline Button] 网站配置:", siteConfigs);
   });
 
   // 监听存储变化，实时更新设置
@@ -55,6 +58,10 @@
         if (!hoverButtonsEnabled) {
           hideHoverIcons();
         }
+      }
+      if (changes.siteConfigs) {
+        siteConfigs = changes.siteConfigs.newValue || [];
+        console.log("[Tiny Memo - Inline Button] 网站配置已更新:", siteConfigs);
       }
     }
   });
@@ -279,6 +286,11 @@
   function showHoverIcons(element) {
     if (!hoverButtonsEnabled || !element || !element.parentNode) return;
 
+    // 如果元素已经有图标，则不做任何事
+    if (element.querySelector(`.${HOVER_CONTAINER_CLASS}`)) {
+      return;
+    }
+
     // If icons are already shown for this element, do nothing
     if (lastHoveredElement === element && document.querySelector(`.${HOVER_CONTAINER_CLASS}`)) {
       clearTimeout(hideHoverIconsTimeout); // Keep them visible
@@ -301,7 +313,12 @@
     container.appendChild(hTtsIcon);
 
     // 直接附加到元素末尾而不是放在viewport右侧
-    element.appendChild(container);
+    try {
+      element.appendChild(container);
+      console.log("[Tiny Memo] 已添加悬停图标到元素:", element);
+    } catch (error) {
+      console.error("[Tiny Memo] 添加悬停图标失败:", error);
+    }
   }
 
   function scheduleHideHoverIcons() {
@@ -414,11 +431,72 @@
     }
   });
 
+  // 检查当前元素是否匹配配置的选择器
+  function matchesConfiguredSelector(element) {
+    // 如果没有配置或配置为空，始终返回true以保持默认行为
+    if (!siteConfigs || siteConfigs.length === 0) {
+      return true;
+    }
+
+    // 获取当前网站域名
+    const currentDomain = window.location.hostname;
+
+    // 查找匹配当前域名的配置
+    const matchingConfigs = siteConfigs.filter(
+      (config) => currentDomain === config.domain || currentDomain.endsWith(`.${config.domain}`) || config.domain === "*" // 允许通配符
+    );
+
+    // 如果没有匹配的域名配置，则不显示
+    if (matchingConfigs.length === 0) {
+      return false;
+    }
+
+    // 检查元素是否匹配任何配置的选择器
+    for (const config of matchingConfigs) {
+      try {
+        // 如果选择器是通配符，匹配所有元素
+        if (config.selector === "*") {
+          return true;
+        }
+
+        // 检查元素本身是否匹配
+        if (element.matches(config.selector)) {
+          return true;
+        }
+
+        // 检查元素是否包含在匹配选择器的元素内
+        if (element.closest(config.selector)) {
+          return true;
+        }
+
+        // 检查元素是否包含匹配选择器的子元素
+        if (element.querySelector(config.selector)) {
+          return true;
+        }
+      } catch (error) {
+        console.error("[Tiny Memo] 无效的CSS选择器:", config.selector, error);
+      }
+    }
+
+    return false;
+  }
+
   // Find a valid parent element to hover on
   function findHoverableParent(element) {
     // 跳过我们自己的控件元素
     if (!element || element.dataset?.tinyMemoIcon || element.dataset?.tinyMemoContainer || element.closest('[data-tiny-memo-icon="true"]') || element.closest(`.${HOVER_CONTAINER_CLASS}`)) {
       return null;
+    }
+
+    // 先检查当前元素是否已被标记为可悬停
+    if (element.dataset?.tinyMemoScanned) {
+      return element;
+    }
+
+    // 检查是否有已标记的父元素
+    const markedParent = element.closest('[data-tiny-memo-scanned="true"]');
+    if (markedParent) {
+      return markedParent;
     }
 
     // 从元素本身开始
@@ -438,8 +516,11 @@
         !current.contains(document.querySelector(`.${HOVER_CONTAINER_CLASS}`)) && // 避免重复添加
         window.getComputedStyle(current).visibility !== "hidden" &&
         window.getComputedStyle(current).display !== "none" &&
-        !current.closest("button, input, textarea, select, a[href], label, summary")
+        !current.closest("button, input, textarea, select, a[href], label, summary") &&
+        matchesConfiguredSelector(current) // 检查是否匹配配置的选择器
       ) {
+        // 标记该元素已被识别为可悬停
+        current.dataset.tinyMemoScanned = "true";
         return current;
       }
       current = current.parentElement;
@@ -477,6 +558,90 @@
   // Pre-create selection buttons
   getSelectionMemoButton();
   getSelectionTtsButton();
+
+  // 添加MutationObserver监听DOM变化
+  function setupMutationObserver() {
+    console.log("[Tiny Memo] 设置MutationObserver监听DOM变化");
+
+    // 创建一个观察器实例
+    const observer = new MutationObserver((mutations) => {
+      if (!hoverButtonsEnabled) return;
+
+      let shouldScan = false;
+
+      // 检查是否有新元素添加
+      for (const mutation of mutations) {
+        if (mutation.type === "childList" && mutation.addedNodes.length > 0) {
+          shouldScan = true;
+          break;
+        }
+      }
+
+      // 如果有新元素添加，延迟一点扫描页面
+      if (shouldScan) {
+        setTimeout(() => {
+          console.log("[Tiny Memo] 检测到DOM变化，扫描新元素");
+          scanPageForHoverableElements();
+        }, 500);
+      }
+    });
+
+    // 配置观察选项
+    const config = {
+      childList: true, // 观察目标子节点的变化
+      subtree: true, // 观察所有后代节点
+    };
+
+    // 开始观察document.body
+    observer.observe(document.body, config);
+
+    console.log("[Tiny Memo] MutationObserver已启动");
+  }
+
+  // 扫描页面寻找可悬停元素
+  function scanPageForHoverableElements() {
+    if (!hoverButtonsEnabled) return;
+
+    // 获取当前域名
+    const currentDomain = window.location.hostname;
+
+    // 查找匹配当前域名的配置
+    const matchingConfigs = siteConfigs.filter((config) => currentDomain === config.domain || currentDomain.endsWith(`.${config.domain}`) || config.domain === "*");
+
+    // 如果没有匹配的域名配置，则不扫描
+    if (matchingConfigs.length === 0 && siteConfigs.length > 0) {
+      return;
+    }
+
+    // 对每个配置，尝试找到匹配的元素
+    matchingConfigs.forEach((config) => {
+      try {
+        if (config.selector && config.selector !== "*") {
+          // 使用配置的选择器查找元素
+          const elements = document.querySelectorAll(config.selector);
+          console.log(`[Tiny Memo] 在配置 ${config.domain} 下找到 ${elements.length} 个匹配元素`);
+
+          // 对找到的每个元素进行检查
+          elements.forEach((element) => {
+            // 确保元素没有包含我们的容器，以避免重复添加
+            if (element && !element.querySelector(`.${HOVER_CONTAINER_CLASS}`) && element.innerText && element.innerText.trim().length > 10) {
+              // 将元素标记为已处理，这样鼠标悬停时就能正确识别
+              element.dataset.tinyMemoScanned = "true";
+            }
+          });
+        }
+      } catch (error) {
+        console.error("[Tiny Memo] 扫描元素时出错:", error);
+      }
+    });
+  }
+
+  // 初始延迟后启动观察器
+  setTimeout(() => {
+    setupMutationObserver();
+    // 初次扫描页面
+    scanPageForHoverableElements();
+  }, 1000);
 
   function showTtsErrorNotification(errorMessage) {
     const existingNotification = document.getElementById("tiny-memo-tts-error");

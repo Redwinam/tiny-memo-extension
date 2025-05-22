@@ -24,12 +24,43 @@
           <input type="checkbox" id="hoverButtonsCheckbox" />
           鼠标悬停时显示按钮 (实验性)
         </label>
+
+        <div id="siteConfigSection" style="margin-top: 10px; border-top: 1px solid #ccc; padding-top: 10px">
+          <details>
+            <summary style="cursor: pointer; margin-bottom: 5px">网站元素配置</summary>
+            <div style="margin: 5px 0">
+              <button id="addSiteConfigBtn" style="font-size: 12px; padding: 2px 5px">添加配置</button>
+              <button id="getCurrentSiteBtn" style="font-size: 12px; padding: 2px 5px; margin-left: 5px">获取当前网站</button>
+            </div>
+            <div id="siteConfigList" style="max-height: 100px; overflow-y: auto; margin-top: 5px"></div>
+          </details>
+        </div>
       </div>
     </div>
     <div class="buttons">
       <button id="copyMarkdownBtn">复制为 Markdown</button>
       <button id="clearNotesBtn">复制并清空</button>
     </div>
+
+    <!-- 添加配置的模态框 -->
+    <div id="configModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.5); z-index: 1000">
+      <div style="background-color: white; margin: 20% auto; padding: 20px; width: 80%; border-radius: 5px; box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2)">
+        <h4 style="margin-top: 0">添加网站元素配置</h4>
+        <div style="margin-bottom: 10px">
+          <label for="domainInput">网站域名:</label>
+          <input type="text" id="domainInput" style="width: 100%; margin-top: 5px" placeholder="例如: yuanbao.tencent.com" />
+        </div>
+        <div style="margin-bottom: 10px">
+          <label for="selectorInput">CSS选择器:</label>
+          <input type="text" id="selectorInput" style="width: 100%; margin-top: 5px" placeholder="例如: .agent-chat__list__item__content p" />
+        </div>
+        <div style="display: flex; justify-content: flex-end; margin-top: 10px">
+          <button id="cancelConfigBtn" style="margin-right: 10px">取消</button>
+          <button id="saveConfigBtn">保存</button>
+        </div>
+      </div>
+    </div>
+
     <script src="popup.js"></script>
   </body>
 </html>
